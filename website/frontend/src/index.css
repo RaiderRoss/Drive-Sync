@@ -1,0 +1,565 @@
+:root {
+  /* Windows 11 Dark Theme Colors */
+  --bg-primary: #1c1c1c;  /* Darker - for sidebar */
+  --bg-secondary: #252525;  /* Lighter - for main content area */
+  --bg-tertiary: #252525;  /* Lighter - for tables and cards */
+  --bg-hover: #2d2d2d;
+  --bg-selected: #3a3a3a;
+  --border-color: #2d2d2d;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --accent-color: #0078d4;
+  --accent-hover: #106ebe;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Ant Design Dark Theme Overrides */
+.ant-layout {
+  background: var(--bg-primary) !important;
+}
+
+.ant-layout-sider {
+  background: var(--bg-secondary) !important;
+}
+
+.ant-menu {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-menu-item {
+  color: var(--text-secondary) !important;
+}
+
+.ant-menu-item:hover {
+  background: var(--bg-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-menu-item-selected {
+  background: var(--bg-selected) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-card {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-card-head {
+  background: var(--bg-tertiary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-card-head-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-card:hover {
+  border-color: var(--accent-color) !important;
+}
+
+.ant-btn {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-btn:hover {
+  background: var(--bg-hover) !important;
+  border-color: var(--accent-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-btn-primary {
+  background: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
+  color: white !important;
+}
+
+.ant-btn-primary:hover {
+  background: var(--accent-hover) !important;
+  border-color: var(--accent-hover) !important;
+}
+
+.ant-input,
+.ant-input-textarea textarea {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.ant-input:hover,
+.ant-input-textarea textarea:hover {
+  border-color: var(--accent-color) !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-textarea textarea:focus {
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2) !important;
+}
+
+.ant-input-affix-wrapper {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-color) !important;
+  border-radius: 4px !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.ant-input-affix-wrapper:hover {
+  border-color: var(--accent-color) !important;
+}
+
+.ant-input-affix-wrapper-focused {
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2) !important;
+}
+
+.ant-input-prefix {
+  color: var(--text-secondary) !important;
+}
+
+.ant-input-lg {
+  font-size: 14px !important;
+  padding: 8px 11px !important;
+}
+
+.ant-breadcrumb {
+  font-size: 14px !important;
+}
+
+.ant-breadcrumb a {
+  color: var(--text-secondary) !important;
+  text-decoration: none;
+}
+
+.ant-breadcrumb a:hover {
+  color: var(--text-primary) !important;
+  text-decoration: underline;
+}
+
+.ant-breadcrumb-separator {
+  color: var(--text-secondary) !important;
+  margin: 0 8px !important;
+}
+
+.ant-breadcrumb-link {
+  color: var(--text-secondary) !important;
+}
+
+.ant-breadcrumb li:last-child .ant-breadcrumb-link {
+  color: var(--text-primary) !important;
+  font-weight: 400;
+}
+
+.ant-typography {
+  color: var(--text-primary) !important;
+}
+
+.ant-statistic-title {
+  color: var(--text-secondary) !important;
+}
+
+.ant-statistic-content {
+  color: var(--text-primary) !important;
+}
+
+.ant-drawer-content {
+  background: var(--bg-secondary) !important;
+}
+
+.ant-drawer-header {
+  background: var(--bg-tertiary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.ant-drawer-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-spin {
+  color: var(--accent-color) !important;
+}
+
+.ant-message-notice-content {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-content {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: 0 6px 16px 0 rgba(0, 0, 0, 0.32), 0 9px 28px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.ant-modal-header {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  padding: 20px 24px !important;
+}
+
+.ant-modal-title {
+  color: var(--text-primary) !important;
+  font-size: 16px !important;
+  font-weight: 500 !important;
+}
+
+.ant-modal-body {
+  padding: 24px !important;
+  background: var(--bg-secondary) !important;
+}
+
+.ant-modal-footer {
+  border-top: 1px solid var(--border-color) !important;
+  background: var(--bg-secondary) !important;
+  padding: 16px 24px !important;
+}
+
+.ant-modal-footer .ant-btn {
+  height: 36px !important;
+  padding: 4px 20px !important;
+  font-size: 14px !important;
+  border-radius: 4px !important;
+}
+
+.ant-modal-close {
+  color: var(--text-secondary) !important;
+}
+
+.ant-modal-close:hover {
+  color: var(--text-primary) !important;
+  background: var(--bg-hover) !important;
+}
+
+.ant-modal-mask {
+  background-color: rgba(0, 0, 0, 0.65) !important;
+}
+
+.ant-upload {
+  color: var(--text-primary) !important;
+}
+
+.ant-upload-list {
+  color: var(--text-primary) !important;
+}
+
+.ant-upload-list-item {
+  background: var(--bg-tertiary) !important;
+  border: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-upload-list-item:hover {
+  background: var(--bg-hover) !important;
+}
+
+.ant-upload-list-item-name {
+  color: var(--text-primary) !important;
+}
+
+.ant-upload-list-item-card-actions .anticon {
+  color: var(--text-secondary) !important;
+}
+
+.ant-upload-list-item-card-actions .anticon:hover {
+  color: var(--text-primary) !important;
+}
+
+.ant-progress-text {
+  color: var(--text-primary) !important;
+}
+
+.ant-btn-link {
+  color: var(--accent-color) !important;
+}
+
+.ant-btn-link:hover {
+  color: var(--accent-hover) !important;
+}
+
+.ant-btn-dangerous {
+  background: #d32f2f !important;
+  border-color: #d32f2f !important;
+}
+
+.ant-btn-dangerous:hover {
+  background: #b71c1c !important;
+  border-color: #b71c1c !important;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-tertiary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-hover);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+/* Alert styling */
+.ant-alert {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.ant-alert-message {
+  color: var(--text-primary) !important;
+}
+
+.ant-alert-description {
+  color: var(--text-secondary) !important;
+}
+
+/* Table styling for Windows Explorer look */
+.ant-table {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-table-thead > tr > th {
+  background: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  font-weight: 400;
+  font-size: 12px;
+  padding: 8px 16px !important;
+}
+
+.ant-table-tbody > tr {
+  background: var(--bg-tertiary) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: var(--bg-hover) !important;
+}
+
+.ant-table-tbody > tr.ant-table-row-selected > td {
+  background: var(--bg-selected) !important;
+}
+
+.ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+  padding: 8px 16px !important;
+  font-size: 13px;
+}
+
+.ant-table-cell {
+  background: transparent !important;
+}
+
+.ant-table-container {
+  border: none !important;
+}
+
+.ant-table-placeholder {
+  background: var(--bg-tertiary) !important;
+}
+
+.ant-table-placeholder .ant-empty-description {
+  color: var(--text-secondary) !important;
+}
+
+.ant-table-column-sorter {
+  color: var(--text-secondary) !important;
+}
+
+.ant-table-column-sorters:hover .ant-table-column-sorter {
+  color: var(--text-primary) !important;
+}
+
+/* Tree component styling for Windows Explorer look */
+.ant-tree {
+  background: #1c1c1c !important;
+  color: var(--text-primary) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.ant-tree .ant-tree-node-content-wrapper {
+  color: var(--text-primary) !important;
+  transition: background 0.1s;
+  padding: 2px 8px !important;
+  border-radius: 2px;
+  line-height: 24px !important;
+}
+
+.ant-tree .ant-tree-node-content-wrapper:hover {
+  background: #252525 !important;
+}
+
+.ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-tree .ant-tree-title {
+  color: var(--text-primary) !important;
+}
+
+.ant-tree .ant-tree-switcher {
+  color: var(--text-secondary) !important;
+}
+
+.ant-tree .ant-tree-switcher:hover {
+  color: var(--text-primary) !important;
+}
+
+.ant-tree .ant-tree-iconEle {
+  color: #ffd966 !important;
+}
+
+.ant-tree-indent-unit {
+  width: 16px !important;
+}
+
+.ant-tree .ant-tree-treenode {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.ant-tree-list-holder-inner {
+  padding: 0 !important;
+}
+
+.ant-tree .ant-tree-list {
+  padding: 0 !important;
+}
+
+/* Remove default selection highlight */
+.ant-tree-node-selected {
+  background: transparent !important;
+}
+
+.ant-tree .ant-tree-treenode-selected::before {
+  background: transparent !important;
+}
+
+.ant-tree-treenode::before {
+  background: transparent !important;
+}
+
+/* Dropdown menu dark theme */
+.ant-dropdown {
+  background: var(--bg-secondary) !important;
+}
+
+.ant-dropdown-menu {
+  background: var(--bg-secondary) !important;
+  border: 1px solid var(--border-color) !important;
+  padding: 4px !important;
+  box-shadow: 0 3px 6px -4px rgba(0, 0, 0, 0.48), 0 6px 16px 0 rgba(0, 0, 0, 0.32), 0 9px 28px 8px rgba(0, 0, 0, 0.2) !important;
+}
+
+.ant-dropdown-menu-item,
+.ant-dropdown-menu-submenu-title {
+  color: var(--text-primary) !important;
+  padding: 8px 12px !important;
+  border-radius: 2px !important;
+}
+
+.ant-dropdown-menu-item:hover,
+.ant-dropdown-menu-submenu-title:hover {
+  background: var(--bg-hover) !important;
+}
+
+.ant-dropdown-menu-item-icon {
+  color: var(--text-secondary) !important;
+}
+
+.ant-dropdown-menu-item:hover .ant-dropdown-menu-item-icon {
+  color: var(--text-primary) !important;
+}
+
+.ant-dropdown-menu-item .ant-upload {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.ant-dropdown-menu-item .ant-upload span {
+  color: var(--text-primary) !important;
+}
+
+/* Enhanced folder name input styling */
+.folder-name-input.ant-input-affix-wrapper {
+  background: #2b2b2b !important;
+  border: 1px solid #3d3d3d !important;
+  border-radius: 6px !important;
+  padding: 8px 12px !important;
+  height: 40px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+.folder-name-input.ant-input-affix-wrapper:hover {
+  border-color: #4a4a4a !important;
+  background: #303030 !important;
+}
+
+.folder-name-input.ant-input-affix-wrapper-focused,
+.folder-name-input.ant-input-affix-wrapper:focus-within {
+  border-color: #0078d4 !important;
+  background: #2b2b2b !important;
+  box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.15) !important;
+}
+
+.folder-name-input input.ant-input {
+  background: transparent !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  padding-left: 8px !important;
+}
+
+.folder-name-input input.ant-input::placeholder {
+  color: #6a6a6a !important;
+  font-style: italic;
+}
+
+.folder-name-input .ant-input-prefix {
+  margin-right: 8px !important;
+}
+
+/* Folder tree icons styling */
+.folder-tree .ant-tree-iconEle {
+  font-size: 18px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.folder-tree .ant-tree-iconEle svg {
+  width: 18px !important;
+  height: 18px !important;
+}

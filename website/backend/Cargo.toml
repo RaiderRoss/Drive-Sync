@@ -1,0 +1,17 @@
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum = { version = "0.8.4", features = ["multipart"] }
+uuid = { version = "1.17", features = ["v4"] }
+tower-http = { version = "0.5", features = ["cors"] }
+tokio = { version = "1.45.1", features = ["full"] }
+serde = { version = "1.0", features = ["derive"] }
+tokio-util = { version = "0.7", features = ["io"] }
+futures-core = "0.3.31"
+axum-extra = { version = "0.10", features = ["typed-header"] }
+futures = "0.3.31"
+serde_json = "1.0.140"
+dotenv = "0.15.0"

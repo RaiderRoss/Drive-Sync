@@ -1,0 +1,4 @@
+storage_path = "D:\\CloudStorage"
+log_path = "logs.toml"
+changes_path = "changes.toml"
+error_logs = "logs"
