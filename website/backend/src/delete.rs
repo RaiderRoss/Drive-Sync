@@ -15,18 +15,16 @@ pub async fn delete_file(Path(target_path): Path<String>) -> impl IntoResponse {
     let result = if path.is_file() {
         fs::remove_file(&path)
     } else if path.is_dir() {
-        fs::remove_dir(&path)
+        fs::remove_dir_all(&path)
     } else {
         return (StatusCode::BAD_REQUEST, "Invalid file or folder").into_response();
     };
 
     match result {
         Ok(_) => {
-            println!("Deleted: {}", path.display());
             (StatusCode::OK, "Deleted successfully").into_response()
         }
         Err(e) => {
-            eprintln!("Failed to delete {}: {}", path.display(), e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete file or folder",

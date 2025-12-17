@@ -1,5 +1,5 @@
 {
-  "name": "no_drive",
+  "name": "drive_sync",
   "private": true,
   "scripts": {
     "frontend": "cd frontend && npm run dev",

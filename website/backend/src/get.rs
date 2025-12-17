@@ -8,17 +8,13 @@ use axum::{
 use bytes::Bytes;
 use futures::StreamExt;
 use serde::Serialize;
-use std::{
-    collections::HashMap,
-    fs, io,
-    path::PathBuf,
-};
+use std::{collections::HashMap, fs, io, path::PathBuf};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt},
 };
 use tokio_util::{bytes, io::ReaderStream};
-
+use rayon::prelude::*;
 use crate::UPLOAD_DIR;
 use crate::util::clean_path;
 
@@ -111,7 +107,6 @@ pub async fn list_uploaded_files(
     Ok(Json(entries))
 }
 pub async fn download_file(Path(filename): Path<String>) -> Result<impl IntoResponse, StatusCode> {
-
     let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
 
     path.push(&filename);
@@ -152,7 +147,7 @@ pub async fn stream_video(
     Path(filename): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, StatusCode> {
-    println!("Streaming path: {}", filename);
+
     let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
     path.push(&filename);
 
@@ -228,17 +223,41 @@ pub struct StatsResponse {
 }
 
 pub fn get_directory_size<P: AsRef<std::path::Path>>(path: P) -> io::Result<u64> {
-    let mut size = 0;
+    let path = path.as_ref();
 
-    for entry in fs::read_dir(path)? {
-        let entry = entry?;
-        let metadata = entry.metadata()?;
-        if metadata.is_file() {
-            size += metadata.len();
-        } else if metadata.is_dir() {
-            size += get_directory_size(entry.path())?;
-        }
-    }
+    let entries = match fs::read_dir(path) {
+        Ok(e) => e.collect::<Result<Vec<_>, _>>()?,
+        Err(_) => return Ok(0),
+    };
+
+    let size: u64 = entries
+        .into_par_iter()
+        .map(|entry| {
+            let path = entry.path();
+            let meta = match entry.metadata() {
+                Ok(m) => m,
+                Err(_) => return 0,
+            };
+
+            if meta.is_file() {
+                meta.len()
+            } else if meta.is_dir() {
+                #[cfg(windows)]
+                {
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        if name.eq_ignore_ascii_case("$RECYCLE.BIN")
+                            || name.eq_ignore_ascii_case("System Volume Information")
+                        {
+                            return 0;
+                        }
+                    }
+                }
+                get_directory_size(path).unwrap_or(0)
+            } else {
+                0
+            }
+        })
+        .sum();
 
     Ok(size)
 }

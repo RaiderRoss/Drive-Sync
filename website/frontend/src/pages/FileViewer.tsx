@@ -97,18 +97,16 @@ const FileViewer = () => {
             const formData = new FormData();
             const blob = new Blob([editedContent], { type: 'text/plain' });
 
-            formData.append('file', blob, filename.split('/').pop() || 'file.txt');
+            formData.append('file', blob, filename);
 
-            const uploadPath = `/api/upload/${filename
-                .split('/')
-                .slice(0, -1)
-                .join('/')}`;
+            const uploadPath = `/api/upload/${encodeURIComponent(filename)}`;
 
             const res = await fetch(uploadPath || '/api/upload', {
                 method: 'POST',
                 body: formData,
             });
 
+            console.log('Save response:', res);
             if (res.ok) {
                 message.success('File saved successfully');
                 setContent(editedContent);
@@ -153,22 +151,22 @@ const FileViewer = () => {
     if (error) return <Alert message="Error" description={error} type="error" showIcon />;
 
     return (
-        <div style={{ 
-            height: '100vh', 
-            display: 'flex', 
+        <div style={{
+            height: '100vh',
+            display: 'flex',
             flexDirection: 'column',
             background: '#252525'
         }}>
 
-            <div style={{ 
-                background: '#252525', 
+            <div style={{
+                background: '#252525',
                 borderBottom: '1px solid #3d3d3d',
                 padding: '12px 16px',
             }}>
                 <Breadcrumb items={breadcrumbItems} />
             </div>
 
-            {fileType === 'text' && content && (
+            {fileType === 'text' && content !== null && (
                 <div
                     style={{
                         background: '#252525',
@@ -185,14 +183,14 @@ const FileViewer = () => {
                     <div>
                         {isEditing ? (
                             <>
-                                <Button 
-                                    type="primary" 
-                                    onClick={handleSave} 
+                                <Button
+                                    type="primary"
+                                    onClick={handleSave}
                                     style={{ marginRight: 8 }}
                                 >
                                     Save
                                 </Button>
-                                <Button 
+                                <Button
                                     onClick={() => {
                                         setIsEditing(false);
                                         setEditedContent(content);
@@ -208,9 +206,9 @@ const FileViewer = () => {
                 </div>
             )}
 
-            <div style={{ 
-                flex: 1, 
-                overflow: 'hidden', 
+            <div style={{
+                flex: 1,
+                overflow: 'hidden',
                 background: '#202020',
                 display: 'flex',
                 justifyContent: 'center',
@@ -287,7 +285,7 @@ const FileViewer = () => {
                     </div>
                 )}
 
-                {fileType === 'text' && content && (
+                {fileType === 'text' && content !== null && (
                     <div
                         style={{
                             width: '100%',
@@ -302,8 +300,8 @@ const FileViewer = () => {
                                 value={editedContent}
                                 onChange={e => setEditedContent(e.target.value)}
                                 autoSize={{ minRows: 30 }}
-                                style={{ 
-                                    fontFamily: 'Consolas, Monaco, "Courier New", monospace', 
+                                style={{
+                                    fontFamily: 'Consolas, Monaco, "Courier New", monospace',
                                     fontSize: 14,
                                     background: '#1e1e1e',
                                     border: 'none',

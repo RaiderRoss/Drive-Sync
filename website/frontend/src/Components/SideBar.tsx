@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Tree } from 'antd';
+import { Button, Dropdown, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useRefresh } from '../contexts/RefreshContext';
+import { FaAngleDown, FaFileAlt } from 'react-icons/fa';
+import { GiCircle } from 'react-icons/gi';
+import { HiPlus } from 'react-icons/hi';
 
 interface FileEntry {
     name: string;
@@ -18,7 +21,7 @@ interface SidebarProps {
 const Sidebar = ({ onLinkClick }: SidebarProps) => {
     const navigate = useNavigate();
     const location = useLocation();
-    const { refreshTrigger } = useRefresh();
+    const { refreshTrigger, triggerRefresh } = useRefresh();
     const [treeData, setTreeData] = useState<DataNode[]>([]);
     const [expandedKeys, setExpandedKeys] = useState<string[]>(['root']);
     const [loadedKeys, setLoadedKeys] = useState<string[]>([]);
@@ -43,7 +46,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
             });
             const data: FileEntry[] = await res.json();
             const folders = data.filter(f => f.is_dir);
-            
+
             const nodes: DataNode[] = folders.map(folder => buildTreeNode(folder, ''));
             setTreeData([
                 {
@@ -76,13 +79,19 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
 
     const reloadFolder = async (folderPath: string) => {
         try {
-            const url = `${API_BASE}/uploads/${encodeURIComponent(folderPath)}`;
+            const encodedPath = folderPath
+                .split('/')
+                .filter(Boolean)
+                .map(encodeURIComponent)
+                .join('/');
+            const url = `${API_BASE}/uploads/${encodedPath}`;
             const res = await fetch(url, {
                 headers: { Accept: 'application/json' },
+                cache: 'no-store',
             });
             const data: FileEntry[] = await res.json();
             const folders = data.filter(f => f.is_dir);
-            
+
             const childNodes = folders.map(folder => buildTreeNode(folder, folderPath));
 
             setTreeData(prevData => {
@@ -104,6 +113,15 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
         }
     };
 
+    const fetchFiles = async () => {
+        if (currentPath) {
+            const decodedPath = decodeURIComponent(currentPath);
+            await reloadFolder(decodedPath);
+        } else {
+            await fetchRootFiles();
+        }
+    };
+
     useEffect(() => {
 
         if (!location.pathname.startsWith('/files')) {
@@ -115,13 +133,13 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
             const decodedPath = decodeURIComponent(currentPath);
             const pathParts = decodedPath.split('/');
             const keysToExpand = ['root'];
-            
+
             let accumulatedPath = '';
             for (let i = 0; i < pathParts.length; i++) {
                 accumulatedPath = accumulatedPath ? `${accumulatedPath}/${pathParts[i]}` : pathParts[i];
                 keysToExpand.push(accumulatedPath);
             }
-            
+
             const loadParentFolders = async () => {
                 for (let i = 0; i < keysToExpand.length - 1; i++) {
                     const key = keysToExpand[i];
@@ -131,7 +149,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                 }
                 setExpandedKeys(keysToExpand);
             };
-            
+
             loadParentFolders();
         } else {
             setExpandedKeys(['root']);
@@ -140,22 +158,27 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
 
     const onLoadData = async (node: any): Promise<void> => {
         const path = node.key === 'root' ? '' : node.key;
-        
+
         if (node.children && node.children.length > 0) {
             return;
         }
 
         try {
             const url = path
-                ? `${API_BASE}/uploads/${encodeURIComponent(path)}`
+                ? `${API_BASE}/uploads/${path
+                    .split('/')
+                    .filter(Boolean)
+                    .map(encodeURIComponent)
+                    .join('/')}`
                 : `${API_BASE}/uploads`;
 
             const res = await fetch(url, {
                 headers: { Accept: 'application/json' },
+                cache: 'no-store',
             });
             const data: FileEntry[] = await res.json();
             const folders = data.filter(f => f.is_dir);
-            
+
             const childNodes = folders.map(folder => buildTreeNode(folder, path));
 
             setTreeData(prevData => {
@@ -200,10 +223,42 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
     const onExpand = (expandedKeysValue: any[]) => {
         setExpandedKeys(expandedKeysValue);
     };
+    const onCreateFolder = async () => {
+        const basePath = currentPath === '/' ? '' : currentPath.replace(/\/$/, '');
+        const fullPath = `${basePath}/New folder`.replace(/^\/+/, '');
+
+        const res = await fetch(`/api/create_path/${fullPath}/`, {
+            method: 'POST',
+        });
+
+        if (res.ok) {
+            triggerRefresh();
+            await fetchFiles();
+        } else {
+            console.error(await res.text());
+        }
+    };
+
+    const onCreateFile = async () => {
+        const basePath = currentPath === '/' ? '' : currentPath.replace(/\/$/, '');
+        const fullPath = `${basePath}/New file.txt`.replace(/^\/+/, '');
+
+        const res = await fetch(`/api/create_path/${fullPath}`, {
+            method: 'POST',
+        });
+
+        if (res.ok) {
+            triggerRefresh();
+            await fetchFiles();
+        } else {
+            console.error(await res.text());
+        }
+    };
+
 
     // Only show selected keys when on /files/* route, not when viewing a file
-    const currentPath = location.pathname.startsWith('/files') 
-        ? location.pathname.replace(/^\/files\/?/, '') 
+    const currentPath = location.pathname.startsWith('/files')
+        ? location.pathname.replace(/^\/files\/?/, '')
         : '';
     const selectedKeys = currentPath ? [decodeURIComponent(currentPath)] : location.pathname.startsWith('/files') ? ['root'] : [];
 
@@ -223,10 +278,60 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                     background: '#1c1c1c',
                 }}
             >
-                No drive
+                <Dropdown
+                    trigger={['click']}
+                    placement="bottomLeft"
+                    menu={{
+                        items: [
+                            {
+                                key: 'folder',
+                                icon: <FcFolder size={22} />,
+                                label: <span style={{ fontSize: 16 }}>New Folder</span>,
+                                onClick: onCreateFolder
+                            },
+                            {
+                                key: 'file',
+                                icon: <FaFileAlt style={{ fontSize: 20, color: '#95a5a6' }} />,
+                                label: <span style={{ fontSize: 16 }}>New File</span>,
+                                onClick: onCreateFile
+                            },
+                        ],
+                    }}
+                >
+
+                    <Button
+                        type="text"
+                        size="large"
+                        style={{
+                            color: '#fff',
+                            fontSize: 20,
+                            height: 44,
+                            padding: '0 16px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                        }}
+                    >
+                        <div style={{ position: 'relative', width: 24, height: 24 }}>
+                            <GiCircle size={24} color="#fff" />
+                            <HiPlus size={16} color="#7fc2d2ff" style={{
+                                position: 'absolute',
+                                top: '50%',
+                                left: '50%',
+                                transform: 'translate(-50%, -50%)'
+                            }} />
+                        </div>
+
+                        New
+                        <FaAngleDown />
+                    </Button>
+
+                </Dropdown>
+
             </div>
-            <div style={{ 
-                flex: 1, 
+            <div style={{
+                marginTop: 10,
+                flex: 1,
                 overflow: 'auto',
                 background: '#1c1c1c',
             }}>
