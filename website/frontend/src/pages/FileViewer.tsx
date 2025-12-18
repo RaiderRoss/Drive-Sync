@@ -161,9 +161,16 @@ const FileViewer = () => {
             <div style={{
                 background: '#252525',
                 borderBottom: '1px solid #3d3d3d',
-                padding: '12px 16px',
+                paddingTop: 12,
+                paddingBottom: 12,
+                paddingRight: 16,
+                paddingLeft: window.innerWidth <= 768 ? 60 : 16,
             }}>
-                <Breadcrumb items={breadcrumbItems} />
+                <Breadcrumb 
+                    items={breadcrumbItems} 
+                    separator="/"
+                    style={{ paddingLeft: window.innerWidth <= 768 ? 0 : 0 }}
+                />
             </div>
 
             {fileType === 'text' && content !== null && (
@@ -171,7 +178,10 @@ const FileViewer = () => {
                     style={{
                         background: '#252525',
                         borderBottom: '1px solid #3d3d3d',
-                        padding: '12px 16px',
+                        paddingTop: 12,
+                        paddingBottom: 12,
+                        paddingRight: 16,
+                        paddingLeft: window.innerWidth <= 768 ? 60 : 16,
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',

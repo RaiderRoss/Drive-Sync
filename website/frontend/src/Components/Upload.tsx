@@ -4,7 +4,8 @@ import type { UploadProps } from 'antd';
 import { Button, message, Upload, Card, Typography } from 'antd';
 import { useLocation } from 'react-router-dom';
 
-const { Title, Paragraph } = Typography;
+const { Paragraph } = Typography;
+const { Dragger } = Upload;
 
 interface UploadAreaProps {
   fetchFiles: () => void;
@@ -57,33 +58,36 @@ const UploadArea: React.FC<UploadAreaProps> = ({ fetchFiles }) => {
   return (
     <div style={{ width: '100%' }}>
       <Card
-        style={{ 
-          borderRadius: 4, 
-          border: '1px solid #3d3d3d',
-          background: '#2b2b2b'
+        className="upload-card"
+        style={{
+          borderRadius: 4,
+          border: '2px dashed #446e4dff',
+          background: '#2b2b2b',
         }}
-        bodyStyle={{ padding: '24px' }}
+
+
+        bodyStyle={{ padding: 0 }}
       >
-        <Title level={4} style={{ textAlign: 'center', marginBottom: 8, color: '#ffffff' }}>
-          Upload Files
-        </Title>
-        <Paragraph style={{ textAlign: 'center', marginBottom: 16, color: '#b3b3b3', fontSize: 13 }}>
-          Select or drag your files here
-        </Paragraph>
-        <Upload
+        <Dragger
           {...props}
-          style={{ width: '100%' }}
+          style={{ width: '100%', border: 'none', background: 'transparent', paddingBottom: '12px' }}
           showUploadList={{ showRemoveIcon: true }}
         >
-          <Button
-            icon={<UploadOutlined />}
-            type="primary"
-            size="large"
-            style={{ width: '100%', fontSize: 14 }}
-          >
-            Choose Files
-          </Button>
-        </Upload>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '10px 24px' }}>
+            <Button
+              icon={<UploadOutlined />}
+              type="primary"
+              size="large"
+              style={{ fontSize: 14, minWidth: '200px' }}
+            >
+              Upload files
+            </Button>
+            <Paragraph style={{ textAlign: 'center', margin: 0, color: '#b3b3b3', fontSize: 13 }}>
+              Select or drag your files here
+            </Paragraph>
+          </div>
+        </Dragger>
+
       </Card>
     </div>
   );

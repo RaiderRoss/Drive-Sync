@@ -81,19 +81,17 @@ function App() {
                 height: '100%',
               }}
             >
-              {/* Hamburger menu button for mobile */}
+
               {isMobile && (
                 <Button
                   type="text"
-                  icon={<MenuOutlined style={{ fontSize: 20 }} />}
+                  icon={<MenuOutlined style={{ fontSize: 11 }} />}
                   onClick={() => setCollapsed(!collapsed)}
                   style={{
                     position: 'fixed',
-                    top: 16,
-                    left: 16,
+                    top: 2,
+                    left: 2,
                     zIndex: 1001,
-                    width: 44,
-                    height: 44,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

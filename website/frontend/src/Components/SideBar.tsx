@@ -254,9 +254,6 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
             console.error(await res.text());
         }
     };
-
-
-    // Only show selected keys when on /files/* route, not when viewing a file
     const currentPath = location.pathname.startsWith('/files')
         ? location.pathname.replace(/^\/files\/?/, '')
         : '';
@@ -266,7 +263,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#1c1c1c' }}>
             <div
                 style={{
-                    height: 64,
+                    height: 55,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -301,20 +298,20 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
 
                     <Button
                         type="text"
-                        size="large"
+                        size="small"
                         style={{
                             color: '#fff',
-                            fontSize: 20,
-                            height: 44,
-                            padding: '0 16px',
+                            fontSize: 14,
+                            height: 32,
+                            padding: '0 12px',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: 8,
+                            gap: 6,
                         }}
                     >
-                        <div style={{ position: 'relative', width: 24, height: 24 }}>
-                            <GiCircle size={24} color="#fff" />
-                            <HiPlus size={16} color="#7fc2d2ff" style={{
+                        <div style={{ position: 'relative', width: 18, height: 18 }}>
+                            <GiCircle size={18} color="#fff" />
+                            <HiPlus size={12} color="#7fc2d2ff" style={{
                                 position: 'absolute',
                                 top: '50%',
                                 left: '50%',
@@ -323,7 +320,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                         </div>
 
                         New
-                        <FaAngleDown />
+                        <FaAngleDown size={12} />
                     </Button>
 
                 </Dropdown>

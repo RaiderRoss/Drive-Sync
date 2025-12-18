@@ -55,7 +55,7 @@ body {
 
 .ant-card {
   background: var(--bg-secondary) !important;
-  border: 1px solid var(--border-color) !important;
+  border: 1px solid var(--border-color);
   color: var(--text-primary) !important;
 }
 
@@ -71,6 +71,10 @@ body {
 
 .ant-card:hover {
   border-color: var(--accent-color) !important;
+}
+
+.upload-card:hover {
+  border-color: #446e4dff !important;
 }
 
 .ant-btn {
@@ -406,20 +410,38 @@ body {
   margin: 0 !important;
 }
 
-.ant-tree .ant-tree-node-content-wrapper {
-  color: var(--text-primary) !important;
+.ant-tree .ant-tree-treenode {
+  padding: 0 !important;
+  margin: 0 !important;
+  position: relative;
+  width: 100%;
   transition: background 0.1s;
-  padding: 2px 8px !important;
-  border-radius: 2px;
-  line-height: 24px !important;
 }
 
-.ant-tree .ant-tree-node-content-wrapper:hover {
+.ant-tree .ant-tree-treenode:hover {
   background: #252525 !important;
 }
 
-.ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected {
+.ant-tree .ant-tree-treenode-selected {
   background: rgba(255, 255, 255, 0.08) !important;
+}
+
+.ant-tree .ant-tree-node-content-wrapper {
+  color: var(--text-primary) !important;
+  transition: none;
+  padding: 2px 8px !important;
+  border-radius: 0;
+  line-height: 24px !important;
+  background: transparent !important;
+  flex: 1;
+}
+
+.ant-tree .ant-tree-node-content-wrapper:hover {
+  background: transparent !important;
+}
+
+.ant-tree .ant-tree-node-content-wrapper.ant-tree-node-selected {
+  background: transparent !important;
   color: var(--text-primary) !important;
 }
 
@@ -443,11 +465,6 @@ body {
   width: 16px !important;
 }
 
-.ant-tree .ant-tree-treenode {
-  padding: 0 !important;
-  margin: 0 !important;
-}
-
 .ant-tree-list-holder-inner {
   padding: 0 !important;
 }
@@ -456,14 +473,6 @@ body {
   padding: 0 !important;
 }
 
-/* Remove default selection highlight */
-.ant-tree-node-selected {
-  background: transparent !important;
-}
-
-.ant-tree .ant-tree-treenode-selected::before {
-  background: transparent !important;
-}
 
 .ant-tree-treenode::before {
   background: transparent !important;

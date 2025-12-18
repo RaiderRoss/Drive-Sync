@@ -414,7 +414,6 @@ const Files = () => {
             }}
             onContextMenu={handleContextMenu}
         >
-            {/* Windows Explorer-style Header */}
             <div style={{
                 background: '#252525',
                 borderBottom: '1px solid #2d2d2d',
@@ -433,7 +432,6 @@ const Files = () => {
 
             <UploadArea fetchFiles={fetchFiles} />
 
-            {/* File List/Table Area */}
             <div style={{
                 flex: 1,
                 overflow: 'auto',
@@ -469,7 +467,6 @@ const Files = () => {
                 />
             </div>
 
-            {/* Context Menu */}
             <Dropdown
                 menu={{ items: contextMenuItems }}
                 open={contextMenuVisible}

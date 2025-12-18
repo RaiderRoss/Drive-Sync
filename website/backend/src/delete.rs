@@ -1,8 +1,7 @@
-use std::{fs, path::PathBuf};
 use axum::{extract::Path, http::StatusCode, response::IntoResponse};
+use std::{fs, path::PathBuf};
 
 use crate::UPLOAD_DIR;
-
 
 pub async fn delete_file(Path(target_path): Path<String>) -> impl IntoResponse {
     let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
@@ -21,10 +20,9 @@ pub async fn delete_file(Path(target_path): Path<String>) -> impl IntoResponse {
     };
 
     match result {
-        Ok(_) => {
-            (StatusCode::OK, "Deleted successfully").into_response()
-        }
+        Ok(_) => (StatusCode::OK, "Deleted successfully").into_response(),
         Err(e) => {
+            eprintln!("Failed to delete file or folder{}{}", target_path, e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to delete file or folder",
