@@ -158,11 +158,10 @@ pub fn clean_logs(is_logs: bool) {
             .into_iter()
             .filter_map(|x| {
                 let mut copy = x.clone();
-                // TODO if remove is a folder, remove all modifies that are in that folder
 
                 // TODO small optomization : since we only care about look ahead can split from current position and search to the end
 
-                // if remove is followed by modify ignore remove
+                // if remove is followed by modify, ignore the remove event
                 let is_remove = x.event_type == "Remove";
 
                 let find_modify = if is_remove {
@@ -175,7 +174,7 @@ pub fn clean_logs(is_logs: bool) {
 
                 let ignore_modify = find_modify.is_some() && find_modify.unwrap().time > x.time;
 
-                //if a modify is followed by a remove, ignore the modify event
+                //if modify is followed by remove, ignore the modify event
                 let is_modify = x.event_type == "Modify" || x.event_type == "Rename";
 
                 let find_remove = if is_modify {
@@ -189,6 +188,7 @@ pub fn clean_logs(is_logs: bool) {
 
                 let ignore_remove = find_remove.is_some() && find_remove.unwrap().time > x.time;
 
+                // Rename 
                 if is_modify && x.event_type != "Rename" {
                     let rename_event = seen_events.iter().find(|y| {
                         let split: Vec<_> = y.path.split("$-$").collect();
@@ -196,20 +196,15 @@ pub fn clean_logs(is_logs: bool) {
                         let matches = y.event_type == "Rename"
                             && !x.path.contains("$-$")
                             && x.path.contains(&old_path);
-                        if matches {
-                            println!("Matched event: {:?}", y.path);
-                        }
                         matches
                     });
 
                     if let Some(rename_event) = rename_event {
-                        println!("Found!!");
                         let split: Vec<_> = rename_event.path.split("$-$").collect();
                         let old_path = split[0].to_string();
                         let new_path = split[1].to_string();
                         copy.path =
                             format!("{}$-${}", x.path, x.path.replace(&old_path, &new_path));
-                        println!("new path:{}", copy.path)
                     }
                 }
 

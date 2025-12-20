@@ -9,7 +9,7 @@ use std::{
 use reqwest::{Body, Client, get};
 use serde_json::{from_str, json};
 use tokio::fs;
-use tungstenite::{WebSocket, connect, http::response, stream::MaybeTlsStream};
+use tungstenite::{WebSocket, connect, stream::MaybeTlsStream};
 
 use crate::{
     config::CONFIG,
@@ -213,7 +213,23 @@ async fn get_file(file_path: String) {
     let dir = std::path::Path::new(&path).parent().unwrap();
 
     let create = tokio::fs::create_dir_all(dir).await;
+    if create.is_err() {
+        write_err_logs(
+            Some(&file_path),
+            Some(format!("Error creating dir{}", create.unwrap_err()).as_str()),
+            "Getting file",
+        )
+        .await;
+        return;
+    }
     let write = tokio::fs::write(&path, &body).await;
+    if write.is_err() {
+        write_err_logs(
+            Some(&path),
+            Some(format!("Error writing to file{}", write.unwrap_err()).as_str()),
+            "Getting file",
+        ).await;
+    }
 }
 
 async fn delete_file(path: String) {

@@ -22,7 +22,6 @@ use tokio::fs;
 use crate::util::{Events, clean_logs, get_events};
 static STORAGE_PATH: Lazy<String> = Lazy::new(|| "Storage".to_string());
 pub async fn get_logs(path: &str, is_running: Arc<AtomicBool>) -> Response {
-    println!("Getting logs");
     while is_running.load(Ordering::Relaxed) {}
     let events = get_events(path);
     if events.is_some() {
@@ -33,7 +32,6 @@ pub async fn get_logs(path: &str, is_running: Arc<AtomicBool>) -> Response {
 }
 
 pub async fn post_logs(is_running: Arc<AtomicBool>, Json(events): Json<Events>) -> Response {
-    println!("Posting logs");
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
@@ -55,14 +53,12 @@ pub async fn post_logs(is_running: Arc<AtomicBool>, Json(events): Json<Events>) 
 }
 
 pub async fn get_file(Path(file_path): Path<String>) -> Response{
-    println!("Getting a file");
     let file_path = format!("{}/{}", &STORAGE_PATH.as_str(), file_path);
     let data = fs::read(file_path).await.unwrap();
     (StatusCode::OK, data).into_response()
 }
 
 pub async fn delete_file(Path(file_path): Path<String>) -> Response {
-    println!("Deleting a file");
     let file_path = format!("{}/{}", &STORAGE_PATH.as_str(), file_path);
     let meta = tokio::fs::metadata(&file_path).await;
     if meta.is_err() {
@@ -80,8 +76,6 @@ pub async fn delete_file(Path(file_path): Path<String>) -> Response {
 }
 
 pub async fn rename_file(Json(payload): Json<Value>) {
-    println!("Renaming a file");
-    println!("Json:{}", payload);
     let old = payload.get("from").unwrap().as_str().unwrap();
     let new = payload.get("to").unwrap().as_str().unwrap();
     let old = format!("{}/{}", &STORAGE_PATH.as_str(), old);
@@ -90,8 +84,6 @@ pub async fn rename_file(Json(payload): Json<Value>) {
 }
 
 pub async fn post_file(Path(file_path): Path<String>, body: Bytes) {
-    println!("Posting a file");
-    println!("Path:{}", file_path);
     let mut file_path = file_path;
 
     if file_path.contains("$-$") {
@@ -109,7 +101,6 @@ pub async fn post_file(Path(file_path): Path<String>, body: Bytes) {
     }
 
     let file_path = format!("{}/{}", STORAGE_PATH.as_str(), file_path);
-    println!("FILE PATH:{}", file_path);
     let dir = std::path::Path::new(&file_path).parent().unwrap();
 
     tokio::fs::create_dir_all(dir).await.unwrap();
