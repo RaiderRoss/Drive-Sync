@@ -14,7 +14,8 @@ interface FileEntry {
     name: string;
     size?: number;
     is_dir: boolean;
-    modified?: string;
+    date_modified?: number;
+    file_type?: string;
 }
 
 const Files = () => {
@@ -223,17 +224,17 @@ const Files = () => {
         }),
     ];
 
-    const formatDate = (dateString?: string) => {
-        if (!dateString) return '-';
-        const date = new Date(dateString);
-        return date.toLocaleString('en-US', {
-            month: 'numeric',
-            day: 'numeric',
-            year: 'numeric',
-            hour: 'numeric',
-            minute: '2-digit',
-            hour12: true
-        });
+    const formatDate = (timestamp?: number) => {
+        if (!timestamp) return '-';
+
+        const date = new Date(timestamp * 1000);
+        const day = date.getDate();
+        const month = date.getMonth() + 1;
+        const year = date.getFullYear();
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+
+        return `${day}/${month}/${year} ${hours}:${minutes}`;
     };
 
     const formatSize = (bytes?: number) => {
@@ -301,6 +302,19 @@ const Files = () => {
         return <FileFilled style={{ fontSize: 16, color: '#b3b3b3' }} />;
     };
 
+    const compareByName = (a: FileEntry, b: FileEntry) =>
+        a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+
+    const getType = (entry: FileEntry) => entry.file_type || (entry.is_dir ? 'folder' : 'file');
+
+    const compareByType = (a: FileEntry, b: FileEntry) =>
+        getType(a).localeCompare(getType(b), undefined, { numeric: true, sensitivity: 'base' });
+
+    const compareByDateModified = (a: FileEntry, b: FileEntry) =>
+        (a.date_modified || 0) - (b.date_modified || 0);
+
+    const compareBySize = (a: FileEntry, b: FileEntry) => (a.size || 0) - (b.size || 0);
+
     const columns: ColumnsType<FileEntry> = [
         {
             title: 'Name',
@@ -316,31 +330,38 @@ const Files = () => {
                     <Text style={{ color: '#ffffff' }}>{name}</Text>
                 </div>
             ),
-            sorter: (a, b) => a.name.localeCompare(b.name),
+            sorter: {
+                compare: compareByName,
+                multiple: 1,
+            },
+            defaultSortOrder: 'ascend',
         },
         {
             title: 'Date modified',
-            dataIndex: 'modified',
+            dataIndex: 'date_modified',
             key: 'modified',
-            render: (date: string) => (
+            render: (date: number) => (
                 <Text style={{ color: '#b3b3b3' }}>{formatDate(date)}</Text>
             ),
-            sorter: (a, b) => {
-                const dateA = a.modified ? new Date(a.modified).getTime() : 0;
-                const dateB = b.modified ? new Date(b.modified).getTime() : 0;
-                return dateA - dateB;
+            sorter: {
+                compare: compareByDateModified,
+                multiple: 2,
             },
         },
         {
             title: 'Type',
-            dataIndex: 'is_dir',
+            dataIndex: 'file_type',
             key: 'type',
-            render: (is_dir: boolean) => (
+            render: (_type: string, record: FileEntry) => (
                 <Text style={{ color: '#b3b3b3' }}>
-                    {is_dir ? 'File folder' : 'File'}
+                    {record.file_type || (record.is_dir ? 'folder' : 'file')}
                 </Text>
             ),
-            sorter: (a, b) => (a.is_dir === b.is_dir ? 0 : a.is_dir ? -1 : 1),
+            sorter: {
+                compare: compareByType,
+                multiple: 3,
+            },
+            defaultSortOrder: 'ascend',
         },
         {
             title: 'Size',
@@ -351,7 +372,10 @@ const Files = () => {
                     {record.is_dir ? '-' : formatSize(size)}
                 </Text>
             ),
-            sorter: (a, b) => (a.size || 0) - (b.size || 0),
+            sorter: {
+                compare: compareBySize,
+                multiple: 2,
+            },
         },
         {
             title: 'Actions',
@@ -436,8 +460,9 @@ const Files = () => {
                 flex: 1,
                 overflow: 'auto',
                 background: '#252525',
-                padding: '0 16px',
+                padding: '10px 16px',
             }}>
+
                 <Table
                     columns={columns}
                     dataSource={files.map(file => ({ ...file, key: file.name }))}

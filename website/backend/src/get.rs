@@ -1,3 +1,5 @@
+use crate::{HIDDEN_DIRS, UPLOAD_DIR};
+use crate::util::clean_path;
 use axum::{
     Json,
     body::Body,
@@ -7,26 +9,32 @@ use axum::{
 };
 use bytes::Bytes;
 use futures::StreamExt;
+use rayon::prelude::*;
 use serde::Serialize;
-use std::{collections::HashMap, fs, io, path::PathBuf};
+use std::{collections::HashMap, fs, io, path::PathBuf, time::UNIX_EPOCH};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt},
 };
 use tokio_util::{bytes, io::ReaderStream};
-use rayon::prelude::*;
-use crate::UPLOAD_DIR;
-use crate::util::clean_path;
 
 #[derive(Serialize)]
 pub struct FileEntry {
     name: String,
     size: u64,
     is_dir: bool,
+    date_modified: u64,
+    file_type: String,
 }
 
-pub async fn list_uploaded_files_root() -> Result<Json<Vec<FileEntry>>, StatusCode> {
-    let target_dir = PathBuf::from(UPLOAD_DIR.get().unwrap());
+pub async fn list_uploaded_files(
+    path: Option<Path<String>>,
+) -> Result<Json<Vec<FileEntry>>, StatusCode> {
+    let is_root = path.is_none();
+    let target_dir = match path {
+        Some(Path(p)) => clean_path(p).ok_or(StatusCode::NOT_FOUND)?,
+        None => PathBuf::from(UPLOAD_DIR.get().unwrap()),
+    };
 
     if !target_dir.exists() || !target_dir.is_dir() {
         return Err(StatusCode::NOT_FOUND);
@@ -34,17 +42,16 @@ pub async fn list_uploaded_files_root() -> Result<Json<Vec<FileEntry>>, StatusCo
 
     let mut entries = vec![];
 
-    let mut dir_entries = match tokio::fs::read_dir(&target_dir).await {
-        Ok(dir) => dir,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
+    let mut dir_entries = tokio::fs::read_dir(&target_dir)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     while let Some(entry) = dir_entries
         .next_entry()
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     {
-        if entry.file_name().to_string_lossy() == r"Work" {
+        if is_root && HIDDEN_DIRS.get().unwrap().iter().any(|d| d.eq_ignore_ascii_case(&entry.file_name().to_string_lossy())) {
             continue;
         }
 
@@ -52,12 +59,25 @@ pub async fn list_uploaded_files_root() -> Result<Json<Vec<FileEntry>>, StatusCo
             .metadata()
             .await
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
         entries.push(FileEntry {
             name: entry.file_name().to_string_lossy().to_string(),
-            size: if metadata.is_file() {
-                metadata.len()
+            size: metadata.is_file().then(|| metadata.len()).unwrap_or(0),
+            date_modified: metadata
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+                .map(|d| d.as_secs())
+                .unwrap_or(0),
+            file_type: if metadata.is_file() {
+                entry
+                    .path()
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .unwrap_or("")
+                    .to_lowercase()
             } else {
-                0
+                "folder".to_string()
             },
             is_dir: metadata.is_dir(),
         });
@@ -66,46 +86,6 @@ pub async fn list_uploaded_files_root() -> Result<Json<Vec<FileEntry>>, StatusCo
     Ok(Json(entries))
 }
 
-pub async fn list_uploaded_files(
-    Path(dir_path): Path<String>,
-) -> Result<Json<Vec<FileEntry>>, StatusCode> {
-    let target_dir = clean_path(dir_path);
-
-    if target_dir.is_none() {
-        return Err(StatusCode::NOT_FOUND);
-    }
-
-    let target_dir = target_dir.unwrap();
-
-    let mut entries = vec![];
-
-    let mut dir_entries = match tokio::fs::read_dir(&target_dir).await {
-        Ok(dir) => dir,
-        Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
-    };
-
-    while let Some(entry) = dir_entries
-        .next_entry()
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-    {
-        let metadata = entry
-            .metadata()
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        entries.push(FileEntry {
-            name: entry.file_name().to_string_lossy().to_string(),
-            size: if metadata.is_file() {
-                metadata.len()
-            } else {
-                0
-            },
-            is_dir: metadata.is_dir(),
-        });
-    }
-
-    Ok(Json(entries))
-}
 pub async fn download_file(Path(filename): Path<String>) -> Result<impl IntoResponse, StatusCode> {
     let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
 
@@ -147,7 +127,6 @@ pub async fn stream_video(
     Path(filename): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, StatusCode> {
-
     let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
     path.push(&filename);
 

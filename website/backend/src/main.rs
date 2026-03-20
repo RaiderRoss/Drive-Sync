@@ -23,11 +23,12 @@ pub mod util;
 
 use delete::delete_file;
 use get::{
-    download_file, get_directory_size, list_uploaded_files, list_uploaded_files_root, stream_video,
+    download_file, get_directory_size, list_uploaded_files, stream_video,
 };
 
 static UPLOAD_DIR: OnceLock<String> = OnceLock::new();
 const MAX_STORAGE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
+static HIDDEN_DIRS: OnceLock<Vec<String>> = OnceLock::new();
 
 #[tokio::main]
 async fn main() {
@@ -35,6 +36,17 @@ async fn main() {
     UPLOAD_DIR
         .set(std::env::var("STORAGE_ROOT").unwrap())
         .expect("Failed to set UPLOAD_DIR");
+    HIDDEN_DIRS
+        .set(
+            std::env::var("HIDDEN_DIRECTORIES")
+                .unwrap_or_default()
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect(),
+        )
+        .expect("Failed to set HIDDEN_DIRECTORIES");
+    println!("Hidden directories: {:?}", HIDDEN_DIRS.get().unwrap());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -45,7 +57,7 @@ async fn main() {
         .route("/upload/{*path}", post(upload_file))
         .route("/upload/", post(upload_root))
         .route("/uploads/{*path}", get(list_uploaded_files))
-        .route("/uploads", get(list_uploaded_files_root))
+        .route("/uploads", get(list_uploaded_files))
         .route("/download/{*path}", get(download_file))
         .route("/stream/{*path}", get(stream_video))
         .route("/download/{*path}", delete(delete_file))
@@ -55,7 +67,7 @@ async fn main() {
         .layer(cors)
         .layer(axum::extract::DefaultBodyLimit::disable());
 
-    let listener = TcpListener::bind("0.0.0.0:4023").await.unwrap();
+    let listener = TcpListener::bind("0.0.0.0:5003").await.unwrap();
 
     axum::serve(listener, app).await.unwrap();
 }
