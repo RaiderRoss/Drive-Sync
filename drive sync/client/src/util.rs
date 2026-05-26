@@ -235,6 +235,10 @@ pub fn clean_logs(is_logs: bool) {
             let _ = file.write(event.print().as_bytes());
         }
     }
+
+    if is_logs {
+        
+    }
 }
 
 pub async fn process_logs() {
@@ -245,7 +249,7 @@ pub async fn process_logs() {
     let client_logs = get_events(&CONFIG.log_path);
     let server_logs = fetch_logs().await;
 
-    // TODO split server logs at position of last client log
+    // TODO split server logs at position of last client log using a delimiter on the last line
 
     if server_logs.is_some() && client_events.is_some() {
         let t1 = tokio::spawn(check_client_logs(client_events.unwrap()));

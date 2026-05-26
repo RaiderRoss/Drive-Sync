@@ -126,7 +126,7 @@ async fn send_delete_file(path: String) {
 
     if res.is_err() {
         write_err_logs(
-            None,
+            Some(&path),
             Some(res.unwrap_err().status().unwrap().as_str()),
             "Sending delete",
         )
