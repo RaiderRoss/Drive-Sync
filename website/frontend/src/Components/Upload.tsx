@@ -2,22 +2,20 @@ import React, { useState } from 'react';
 import { UploadOutlined } from '@ant-design/icons';
 import type { UploadProps } from 'antd';
 import { Button, message, Upload, Card, Typography } from 'antd';
-import { useLocation } from 'react-router-dom';
+import { getAuthHeaders } from '../api/File';
 
 const { Paragraph } = Typography;
 const { Dragger } = Upload;
 
 interface UploadAreaProps {
     fetchFiles: () => void;
+    currentPath?: string;
 }
 
-const UploadArea: React.FC<UploadAreaProps> = ({ fetchFiles }) => {
-    const location = useLocation();
+const UploadArea: React.FC<UploadAreaProps> = ({ fetchFiles, currentPath }) => {
     const [, setUploadingFiles] = useState<any[]>([]);
 
-    const currentPath = location.pathname.startsWith('/files')
-        ? location.pathname.slice('/files'.length) || '/'
-        : location.pathname;
+    const uploadPath = currentPath ?? '/';
 
     const checkAllUploadsComplete = (fileList: any[]) => {
         const allDoneOrFailed = fileList.every(
@@ -30,10 +28,8 @@ const UploadArea: React.FC<UploadAreaProps> = ({ fetchFiles }) => {
 
     const props: UploadProps = {
         name: 'file',
-        action: `/api/upload${currentPath}`,
-        headers: {
-            authorization: 'authorization-text',
-        },
+        action: `/api/upload${uploadPath}`,
+        headers: getAuthHeaders(),
         multiple: true,
         onChange(info) {
             setUploadingFiles(info.fileList);

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Button, Dropdown, Tree } from 'antd';
+import { Button, Dropdown, Tree, Tooltip } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useRefresh } from '../contexts/RefreshContext';
-import { FaAngleDown, FaFileAlt } from 'react-icons/fa';
+import { FaAngleDown, FaFileAlt, FaSignOutAlt } from 'react-icons/fa';
 import { GiCircle } from 'react-icons/gi';
 import { HiPlus } from 'react-icons/hi';
+import { getAuthHeaders } from '../api/File';
 
 interface FileEntry {
     name: string;
@@ -42,7 +43,10 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
     const fetchRootFiles = async () => {
         try {
             const res = await fetch(`${API_BASE}/uploads`, {
-                headers: { Accept: 'application/json' },
+                headers: {
+                    Accept: 'application/json',
+                    ...getAuthHeaders(),
+                },
             });
             const data: FileEntry[] = await res.json();
             const folders = data.filter(f => f.is_dir);
@@ -86,7 +90,10 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                 .join('/');
             const url = `${API_BASE}/uploads/${encodedPath}`;
             const res = await fetch(url, {
-                headers: { Accept: 'application/json' },
+                headers: {
+                    Accept: 'application/json',
+                    ...getAuthHeaders(),
+                },
                 cache: 'no-store',
             });
             const data: FileEntry[] = await res.json();
@@ -173,7 +180,10 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                 : `${API_BASE}/uploads`;
 
             const res = await fetch(url, {
-                headers: { Accept: 'application/json' },
+                headers: {
+                    Accept: 'application/json',
+                    ...getAuthHeaders(),
+                },
                 cache: 'no-store',
             });
             const data: FileEntry[] = await res.json();
@@ -229,6 +239,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
 
         const res = await fetch(`/api/create_path/${fullPath}/`, {
             method: 'POST',
+            headers: getAuthHeaders(),
         });
 
         if (res.ok) {
@@ -245,6 +256,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
 
         const res = await fetch(`/api/create_path/${fullPath}`, {
             method: 'POST',
+            headers: getAuthHeaders(),
         });
 
         if (res.ok) {
@@ -254,6 +266,12 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
             console.error(await res.text());
         }
     };
+
+    const logout = () => {
+        localStorage.removeItem('token');
+        navigate('/login');
+    }
+
     const currentPath = location.pathname.startsWith('/files')
         ? location.pathname.replace(/^\/files\/?/, '')
         : '';
@@ -299,6 +317,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                     <Button
                         type="text"
                         size="small"
+                        shape="round"
                         style={{
                             color: '#fff',
                             fontSize: 14,
@@ -324,6 +343,29 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                     </Button>
 
                 </Dropdown>
+
+
+                <Button
+                    type="text"
+                    size="small"
+                    shape="round"
+                    style={{
+                        color: '#fff',
+                        fontSize: 14,
+                        height: 32,
+                        padding: '0 12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginLeft: 10,
+                    }}
+
+                    icon={<FaSignOutAlt />}
+                    onClick={logout}
+                >
+                    Logout
+                </Button>
+
 
             </div>
             <div style={{

@@ -3,11 +3,12 @@ import { Table, Typography, Spin, Button, message, Breadcrumb, Dropdown, Modal, 
 import { DownloadOutlined, DeleteOutlined, FileFilled, FolderAddOutlined, UploadOutlined } from '@ant-design/icons';
 import { FcFolder } from 'react-icons/fc';
 import { FaFilePdf, FaFileAudio, FaFileImage, FaFileVideo, FaFileArchive, FaFileCode, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type { ColumnsType } from 'antd/es/table';
 import type { MenuProps, UploadProps } from 'antd';
 import { useRefresh } from '../contexts/RefreshContext';
 import UploadArea from '../Components/Upload';
+import * as FileAPI from '../api/File';
 const { Text } = Typography;
 
 interface FileEntry {
@@ -18,17 +19,18 @@ interface FileEntry {
     file_type?: string;
 }
 
-const Files = () => {
-    const params = useParams();
-    const directory = params['*'];
+export default function Files() {
     const location = useLocation();
     const { triggerRefresh, refreshTrigger } = useRefresh();
+
+    const directory = location.pathname.startsWith('/files/')
+        ? decodeURIComponent(location.pathname.replace(/^\/files\/?/, '')) || undefined
+        : undefined;
 
     const [files, setFiles] = useState<FileEntry[]>([]);
     const [loading, setLoading] = useState(true);
     const [contextMenuVisible, setContextMenuVisible] = useState(false);
     const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
-    const API_BASE = '/api';
     const navigate = useNavigate();
 
     const [renameOpen, setRenameOpen] = useState(false);
@@ -46,51 +48,30 @@ const Files = () => {
 
         const base = renameTarget.oldPath.split('/').slice(0, -1).join('/');
         const newPath = base ? `${base}/${renameValue}` : renameValue;
-
-        const res = await fetch(`${API_BASE}/rename`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                old_path: renameTarget.oldPath,
-                new_path: newPath,
-            }),
-        });
-
-        if (res.ok) {
+        try {
+            await FileAPI.renameEntryApi(renameTarget.oldPath, newPath);
             message.success('Renamed.');
             setRenameOpen(false);
             fetchFiles();
             triggerRefresh();
-        } else {
+        } catch (err) {
+            console.error('Rename failed', err);
             message.error('Rename failed.');
         }
     };
 
-    const fetchFiles = () => {
+    const fetchFiles = async () => {
+        console.log('Fetching files for directory:', directory);
         setLoading(true);
-
-        const url = directory
-            ? `${API_BASE}/uploads/${encodeURIComponent(directory)}`
-            : `${API_BASE}/uploads`;
-
-        fetch(url, {
-            headers: { Accept: 'application/json' },
-            cache: 'no-store',
-        })
-            .then(async res => {
-                console.log('Response:', res);
-                const text = await res.text();
-                console.log('Response text:', text);
-                const data = JSON.parse(text);
-                setFiles(data);
-                setLoading(false);
-            })
-            .catch(err => {
-                console.error('Failed to fetch or parse JSON:', err);
-                message.error('Could not load files.');
-                setLoading(false);
-            });
-
+        try {
+            const data = await FileAPI.fetchFiles(directory || undefined);
+            setFiles(data);
+        } catch (err) {
+            console.error('Failed to fetch or parse JSON:', err);
+            message.error('Could not load files.');
+        } finally {
+            setLoading(false);
+        }
     };
 
     useEffect(() => {
@@ -99,22 +80,18 @@ const Files = () => {
 
     const downloadFile = (filename: string) => {
         const link = document.createElement('a');
-        link.href = `${API_BASE}/download/${encodeURIComponent(filename)}`;
+        link.href = FileAPI.getDownloadUrl(filename);
         link.download = filename;
         link.click();
     };
 
     const deleteFile = async (filename: string) => {
-        const path = `${API_BASE}/delete/${filename}`.replace(/\/+/g, '/');
-
-        console.log("Deleting:", path);
-
-        const res = await fetch(path, { method: 'DELETE' });
-
-        if (res.ok) {
+        try {
+            await FileAPI.deleteFileApi(filename);
             message.success(`Deleted: ${filename}`);
             fetchFiles();
-        } else {
+        } catch (err) {
+            console.error('Delete failed', err);
             message.error(`Delete failed`);
         }
     };
@@ -142,10 +119,8 @@ const Files = () => {
 
     const uploadProps: UploadProps = {
         name: 'file',
-        action: `${API_BASE}/upload${currentPath}`,
-        headers: {
-            authorization: 'authorization-text',
-        },
+        action: FileAPI.uploadAction(currentPath),
+        headers: FileAPI.getAuthHeaders(),
         multiple: true,
         showUploadList: false,
         onChange(info) {
@@ -454,7 +429,7 @@ const Files = () => {
                 />
             </div>
 
-            <UploadArea fetchFiles={fetchFiles} />
+            <UploadArea fetchFiles={fetchFiles} currentPath={currentPath} />
 
             <div style={{
                 flex: 1,
@@ -527,4 +502,3 @@ const Files = () => {
     );
 };
 
-export default Files;

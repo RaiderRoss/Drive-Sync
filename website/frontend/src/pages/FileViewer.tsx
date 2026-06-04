@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Spin, Alert, Breadcrumb, Input, Button, message } from 'antd';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { getAuthHeaders } from '../api/File';
 
 const { TextArea } = Input;
 
@@ -28,7 +29,7 @@ const extensionToLanguage: Record<string, string> = {
     default: 'text',
 };
 
-const FileViewer = () => {
+export default function FileViewer() {
     const location = useLocation();
     const navigate = useNavigate();
     const rawPath = location.pathname.replace(/^\/file\//, '');
@@ -41,55 +42,110 @@ const FileViewer = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
+    const [previewSrc, setPreviewSrc] = useState<string | null>(null);
 
     const API_BASE = '/api';
     const fileUrl = `${API_BASE}/download/${encodeURIComponent(filename)}`;
-    const videoUrl = `${API_BASE}/stream/${encodeURIComponent(filename)}`;
+
+    const getMediaMimeType = (ext?: string) => {
+        switch (ext) {
+            case 'pdf':
+                return 'application/pdf';
+            case 'jpg':
+            case 'jpeg':
+                return 'image/jpeg';
+            case 'png':
+                return 'image/png';
+            case 'gif':
+                return 'image/gif';
+            case 'bmp':
+                return 'image/bmp';
+            case 'webp':
+                return 'image/webp';
+            case 'mp4':
+                return 'video/mp4';
+            case 'webm':
+                return 'video/webm';
+            case 'mkv':
+                return 'video/x-matroska';
+            case 'avi':
+                return 'video/x-msvideo';
+            case 'mp3':
+                return 'audio/mpeg';
+            case 'wav':
+                return 'audio/wav';
+            case 'ogg':
+                return 'audio/ogg';
+            default:
+                return 'application/octet-stream';
+        }
+    };
 
     useEffect(() => {
         const ext = filename.split('.').pop()?.toLowerCase();
+        let objectUrl: string | null = null;
 
         if (!ext) {
             setFileType('text');
             setHighlightLang('text');
-        } else if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext)) {
-            setFileType('image');
-            setLoading(false);
-            return;
-        } else if (['mp4', 'webm', 'mkv', 'avi'].includes(ext)) {
-            setFileType('video');
-            setLoading(false);
-            return;
-        } else if (['mp3', 'wav', 'ogg'].includes(ext)) {
-            setFileType('audio');
-            setLoading(false);
-            return;
-
-        }
-        else if (ext === 'pdf') {
-            setFileType('pdf');
-            setLoading(false);
-            return;
         } else {
+            const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
+            const isVideo = ['mp4', 'webm', 'mkv', 'avi'].includes(ext);
+            const isAudio = ['mp3', 'wav', 'ogg'].includes(ext);
+            const isPdf = ext === 'pdf';
+
+            if (isImage || isVideo || isAudio || isPdf) {
+                setFileType(isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : 'pdf');
+                setHighlightLang('text');
+                setPreviewSrc(null);
+
+                fetch(fileUrl, {
+                    headers: getAuthHeaders(),
+                })
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        return res.arrayBuffer();
+                    })
+                    .then(buffer => {
+                        const blob = new Blob([buffer], { type: getMediaMimeType(ext) });
+                        objectUrl = URL.createObjectURL(blob);
+                        setPreviewSrc(objectUrl);
+                    })
+                    .catch(err => {
+                        console.error('Media fetch error:', err);
+                        setError('Could not load file content.');
+                    })
+                    .finally(() => setLoading(false));
+
+                return () => {
+                    if (objectUrl) {
+                        URL.revokeObjectURL(objectUrl);
+                    }
+                };
+            }
+
             setFileType('text');
             setHighlightLang(extensionToLanguage[ext] || extensionToLanguage.default);
+
+            fetch(fileUrl, {
+                headers: getAuthHeaders(),
+            })
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.text();
+                })
+                .then(data => {
+                    setContent(data);
+                    setEditedContent(data);
+                })
+                .catch(err => {
+                    console.error('Text fetch error:', err);
+                    setError('Could not load file content.');
+                })
+                .finally(() => setLoading(false));
         }
 
-        fetch(fileUrl)
-            .then(res => {
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return res.text();
-            })
-            .then(data => {
-                setContent(data);
-                setEditedContent(data);
-            })
-            .catch(err => {
-                console.error('Text fetch error:', err);
-                setError('Could not load file content.');
-            })
-            .finally(() => setLoading(false));
-
+        return undefined;
     }, [filename]);
 
     const handleSave = async () => {
@@ -104,6 +160,7 @@ const FileViewer = () => {
             const res = await fetch(uploadPath || '/api/upload', {
                 method: 'POST',
                 body: formData,
+                headers: getAuthHeaders(),
             });
 
             console.log('Save response:', res);
@@ -235,7 +292,7 @@ const FileViewer = () => {
                     >
                         <iframe
                             title="PDF Viewer"
-                            src={fileUrl}
+                            src={previewSrc || ''}
                             style={{
                                 width: '100%',
                                 height: '100%',
@@ -247,7 +304,7 @@ const FileViewer = () => {
 
                 {fileType === 'image' && (
                     <img
-                        src={fileUrl}
+                        src={previewSrc || ''}
                         alt={filename}
                         style={{
                             width: '100%',
@@ -267,7 +324,7 @@ const FileViewer = () => {
                             objectFit: 'contain',
                             backgroundColor: '#202020',
                         }}
-                        src={videoUrl}
+                        src={previewSrc || ''}
                     />
                 )}
 
@@ -288,7 +345,7 @@ const FileViewer = () => {
                                 width: '100%',
                                 outline: 'none',
                             }}
-                            src={videoUrl}
+                            src={previewSrc || ''}
                         >
                             Your browser does not support the audio element.
                         </audio>
@@ -342,5 +399,3 @@ const FileViewer = () => {
         </div>
     );
 };
-
-export default FileViewer;

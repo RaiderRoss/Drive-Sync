@@ -1,5 +1,7 @@
-use crate::{HIDDEN_DIRS, UPLOAD_DIR};
-use crate::util::clean_path;
+use crate::auth::AuthUser;
+use crate::{HIDDEN_DIRS};
+use crate::util::{clean_path, get_user_path};
+use axum::Extension;
 use axum::{
     Json,
     body::Body,
@@ -28,12 +30,14 @@ pub struct FileEntry {
 }
 
 pub async fn list_uploaded_files(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
     path: Option<Path<String>>,
 ) -> Result<Json<Vec<FileEntry>>, StatusCode> {
     let is_root = path.is_none();
+
     let target_dir = match path {
-        Some(Path(p)) => clean_path(p).ok_or(StatusCode::NOT_FOUND)?,
-        None => PathBuf::from(UPLOAD_DIR.get().unwrap()),
+        Some(Path(p)) => clean_path(p, claims.user, claims.admin).ok_or(StatusCode::NOT_FOUND)?,
+        None => PathBuf::from(get_user_path(claims.user, claims.admin)),
     };
 
     if !target_dir.exists() || !target_dir.is_dir() {
@@ -83,11 +87,12 @@ pub async fn list_uploaded_files(
         });
     }
 
+    println!("Found {} entries in directory", entries.len());
     Ok(Json(entries))
 }
 
-pub async fn download_file(Path(filename): Path<String>) -> Result<impl IntoResponse, StatusCode> {
-    let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
+pub async fn download_file(Extension(AuthUser(claims)): Extension<AuthUser>,Path(filename): Path<String>) -> Result<impl IntoResponse, StatusCode> {
+    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
 
     path.push(&filename);
 
@@ -124,10 +129,11 @@ pub async fn download_file(Path(filename): Path<String>) -> Result<impl IntoResp
 }
 
 pub async fn stream_video(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
     Path(filename): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
+    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
     path.push(&filename);
 
     if !path.exists() || !path.is_file() {

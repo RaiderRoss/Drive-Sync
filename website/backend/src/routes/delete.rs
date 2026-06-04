@@ -1,10 +1,10 @@
-use axum::{extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{Extension, extract::Path, http::StatusCode, response::IntoResponse};
 use std::{fs, path::PathBuf};
 
-use crate::UPLOAD_DIR;
+use crate::{auth::AuthUser, util::get_user_path};
 
-pub async fn delete_file(Path(target_path): Path<String>) -> impl IntoResponse {
-    let mut path = PathBuf::from(UPLOAD_DIR.get().unwrap());
+pub async fn delete_file(Extension(AuthUser(claims)): Extension<AuthUser>, Path(target_path): Path<String>) -> impl IntoResponse {
+    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
     path.push(&target_path);
 
     if !path.exists() {
