@@ -1,8 +1,11 @@
 :root {
   /* Windows 11 Dark Theme Colors */
-  --bg-primary: #1c1c1c;  /* Darker - for sidebar */
-  --bg-secondary: #252525;  /* Lighter - for main content area */
-  --bg-tertiary: #252525;  /* Lighter - for tables and cards */
+  --bg-primary: #1c1c1c;
+  /* Darker - for sidebar */
+  --bg-secondary: #252525;
+  /* Lighter - for main content area */
+  --bg-tertiary: #252525;
+  /* Lighter - for tables and cards */
   --bg-hover: #2d2d2d;
   --bg-selected: #3a3a3a;
   --border-color: #2d2d2d;
@@ -128,6 +131,16 @@ body {
   transition: all 0.2s ease-in-out !important;
 }
 
+.ant-input-affix-wrapper>input.ant-input {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  caret-color: #fff !important;
+
+}
+
 .ant-input-affix-wrapper:hover {
   border-color: var(--accent-color) !important;
 }
@@ -135,6 +148,12 @@ body {
 .ant-input-affix-wrapper-focused {
   border-color: var(--accent-color) !important;
   box-shadow: 0 0 0 2px rgba(0, 120, 212, 0.2) !important;
+}
+
+
+.ant-input {
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .ant-input-prefix {
@@ -350,7 +369,7 @@ body {
   color: var(--text-primary) !important;
 }
 
-.ant-table-thead > tr > th {
+.ant-table-thead>tr>th {
   background: var(--bg-tertiary) !important;
   color: var(--text-secondary) !important;
   border-bottom: 1px solid var(--border-color) !important;
@@ -359,19 +378,19 @@ body {
   padding: 8px 16px !important;
 }
 
-.ant-table-tbody > tr {
+.ant-table-tbody>tr {
   background: var(--bg-tertiary) !important;
 }
 
-.ant-table-tbody > tr:hover > td {
+.ant-table-tbody>tr:hover>td {
   background: var(--bg-hover) !important;
 }
 
-.ant-table-tbody > tr.ant-table-row-selected > td {
+.ant-table-tbody>tr.ant-table-row-selected>td {
   background: var(--bg-selected) !important;
 }
 
-.ant-table-tbody > tr > td {
+.ant-table-tbody>tr>td {
   border-bottom: 1px solid var(--border-color) !important;
   color: var(--text-primary) !important;
   padding: 8px 16px !important;
@@ -653,8 +672,8 @@ body {
     min-width: 600px;
   }
 
-  .ant-table-thead > tr > th,
-  .ant-table-tbody > tr > td {
+  .ant-table-thead>tr>th,
+  .ant-table-tbody>tr>td {
     padding: 12px 8px !important;
     font-size: 13px !important;
   }
@@ -742,6 +761,7 @@ body {
 
 /* Mobile phones (480px and below) */
 @media (max-width: 480px) {
+
   /* Even more compact spacing */
   .ant-layout-content {
     padding: 8px !important;
@@ -780,21 +800,24 @@ body {
   }
 
   /* Typography */
-  h1, .ant-typography h1 {
+  h1,
+  .ant-typography h1 {
     font-size: 24px !important;
   }
 
-  h2, .ant-typography h2 {
+  h2,
+  .ant-typography h2 {
     font-size: 20px !important;
   }
 
-  h3, .ant-typography h3 {
+  h3,
+  .ant-typography h3 {
     font-size: 18px !important;
   }
 
   /* Table - more compact on small screens */
-  .ant-table-thead > tr > th,
-  .ant-table-tbody > tr > td {
+  .ant-table-thead>tr>th,
+  .ant-table-tbody>tr>td {
     padding: 10px 6px !important;
     font-size: 12px !important;
   }
@@ -819,6 +842,7 @@ body {
 
 /* Touch device optimizations */
 @media (hover: none) and (pointer: coarse) {
+
   /* Increase all interactive elements for touch */
   .ant-btn,
   .ant-input,
@@ -832,7 +856,7 @@ body {
   .ant-btn:hover,
   .ant-card:hover,
   .ant-menu-item:hover,
-  .ant-table-tbody > tr:hover > td {
+  .ant-table-tbody>tr:hover>td {
     opacity: 1 !important;
   }
 
