@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Dropdown, Tree, Tooltip } from 'antd';
+import { Button, Dropdown, Tree } from 'antd';
 import type { DataNode } from 'antd/es/tree';
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc';
 import { useNavigate, useLocation } from 'react-router-dom';
