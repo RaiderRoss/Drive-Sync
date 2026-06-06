@@ -1,9 +1,16 @@
 use axum::{Extension, extract::Path, http::StatusCode, response::IntoResponse};
 use std::{fs, path::PathBuf};
 
-use crate::{auth::AuthUser, util::get_user_path};
+use crate::{
+    auth::AuthUser,
+    util::{get_user_path, log_actions},
+};
 
-pub async fn delete_file(Extension(AuthUser(claims)): Extension<AuthUser>, Path(target_path): Path<String>) -> impl IntoResponse {
+pub async fn delete_file(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Path(target_path): Path<String>,
+) -> impl IntoResponse {
+    let user_id = claims.user.clone();
     let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
     path.push(&target_path);
 
@@ -20,14 +27,14 @@ pub async fn delete_file(Extension(AuthUser(claims)): Extension<AuthUser>, Path(
     };
 
     match result {
-        Ok(_) => (StatusCode::OK, "Deleted successfully").into_response(),
-        Err(e) => {
-            eprintln!("Failed to delete file or folder{}{}", target_path, e);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to delete file or folder",
-            )
-                .into_response()
+        Ok(_) => {
+            log_actions(user_id, "delete".to_string(), target_path);
+            (StatusCode::OK, "Deleted successfully").into_response()
         }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to delete file or folder",
+        )
+            .into_response(),
     }
 }

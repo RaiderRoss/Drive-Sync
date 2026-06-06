@@ -1,7 +1,7 @@
 use crate::{
     AppState,
     db::{create_user, get_user_by_username},
-    util,
+    util::{self, log_actions},
 };
 use argon2::{
     Argon2,
@@ -38,17 +38,16 @@ pub async fn register_user(
 ) -> impl IntoResponse {
     let username = user_data.get("username").unwrap().as_str().unwrap();
     let password = user_data.get("password").unwrap().as_str().unwrap();
-    println!("Registering user: {}", username);
+
     let salt = SaltString::generate(&mut OsRng);
 
     let hash = Argon2::default()
         .hash_password(password.as_bytes(), &salt)
         .expect("Failed to hash password")
         .to_string();
-    println!("Password hash: {}", hash);
 
     let user = create_user(&state.db, username, &hash, false).await;
-    println!("User creation result: {:?}", user);
+
     if let Err(e) = user {
         if let sqlx::Error::RowNotFound = e {
             return (StatusCode::CONFLICT, "Username already exists").into_response();
@@ -56,9 +55,9 @@ pub async fn register_user(
 
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create user").into_response();
     }
-
-    let token = generate_jwt(user.unwrap(), false);
-
+    let user = user.unwrap();
+    let token = generate_jwt(user.clone(), false);
+    log_actions(format!("{}:{}", username.to_string(), user), "register".to_string(), "".to_string());
     return (StatusCode::OK, Json(json!({ "token": token }))).into_response();
 }
 
@@ -86,7 +85,8 @@ pub async fn login(
         .verify_password(password.as_bytes(), &parsed)
         .is_ok()
     {
-        let token = generate_jwt(user_id, is_admin);
+        let token = generate_jwt(user_id.clone(), is_admin);
+        log_actions(user_id, "login".to_string(), "".to_string());
         return (StatusCode::OK, Json(json!({ "token": token }))).into_response();
     } else {
         return (StatusCode::UNAUTHORIZED, "Invalid username or password").into_response();

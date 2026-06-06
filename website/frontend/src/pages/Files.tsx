@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Table, Typography, Spin, Button, message, Breadcrumb, Dropdown, Modal, Input, Upload as AntUpload } from 'antd';
-import { DownloadOutlined, DeleteOutlined, FileFilled, FolderAddOutlined, UploadOutlined } from '@ant-design/icons';
+import { Table, Typography, Spin, Button, message, Breadcrumb, Dropdown, Modal, Input, Upload as AntUpload, Popover, Space } from 'antd';
+import { DownloadOutlined, DeleteOutlined, FileFilled, FolderAddOutlined, UploadOutlined, SendOutlined, LinkOutlined, UserOutlined, EditOutlined } from '@ant-design/icons';
 import { FcFolder } from 'react-icons/fc';
 import { FaFilePdf, FaFileAudio, FaFileImage, FaFileVideo, FaFileArchive, FaFileCode, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -9,6 +9,7 @@ import type { MenuProps, UploadProps } from 'antd';
 import { useRefresh } from '../contexts/RefreshContext';
 import UploadArea from '../Components/Upload';
 import * as FileAPI from '../api/File';
+import { downloadFileApi } from '../api/File';
 const { Text } = Typography;
 
 interface FileEntry {
@@ -61,7 +62,6 @@ export default function Files() {
     };
 
     const fetchFiles = async () => {
-        console.log('Fetching files for directory:', directory);
         setLoading(true);
         try {
             const data = await FileAPI.fetchFiles(directory || undefined);
@@ -77,13 +77,6 @@ export default function Files() {
     useEffect(() => {
         fetchFiles();
     }, [directory, refreshTrigger]);
-
-    const downloadFile = (filename: string) => {
-        const link = document.createElement('a');
-        link.href = FileAPI.getDownloadUrl(filename);
-        link.download = filename;
-        link.click();
-    };
 
     const deleteFile = async (filename: string) => {
         try {
@@ -355,20 +348,20 @@ export default function Files() {
         {
             title: 'Actions',
             key: 'actions',
-            width: 160,
+            width: 100,
             render: (_: any, record: FileEntry) => {
                 const fullPath = directory ? `${directory}/${record.name}` : record.name;
 
                 return (
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, width: '100%' }}>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 20, width: '100%' }}>
                         {!record.is_dir && (
                             <Button
                                 size="small"
                                 type="text"
-                                icon={<DownloadOutlined />}
+                                icon={<DownloadOutlined style={{ color: "#7782b4" }} />}
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    downloadFile(fullPath);
+                                    downloadFileApi(fullPath);
                                 }}
                                 style={{ color: '#b3b3b3' }}
                             />
@@ -377,12 +370,13 @@ export default function Files() {
                         <Button
                             size="small"
                             type="text"
+                            icon={<EditOutlined style={{ color: "#f5a524" }} />}
                             onClick={(e) => {
                                 e.stopPropagation();
                                 openRename(fullPath, record.is_dir);
                             }}
                         >
-                            Rename
+
                         </Button>
 
                         <Button
@@ -396,7 +390,51 @@ export default function Files() {
                             }}
                             style={{ color: '#ff4d4f' }}
                         />
-                    </div>
+
+
+                        <Popover
+                            overlayStyle={{
+                                "--antd-arrow-background-color": "#313131",
+                            } as React.CSSProperties}
+                            trigger="click"
+                            placement="bottomRight"
+                            styles={{
+                                body: {
+                                    background: "#313131",
+                                    color: "#fff",
+                                },
+                            }}
+                            content={
+                                <Space direction="vertical" style={{ width: 160 }}>
+                                    <Button
+                                        block
+                                        icon={<LinkOutlined />}
+                                    // onClick={() => createShareLink(fullPath)}
+                                    >
+                                        Create Link
+                                    </Button>
+
+                                    <Button
+                                        block
+                                        icon={<UserOutlined />}
+                                    // onClick={() => openSendToUserModal(fullPath)}
+                                    >
+                                        Send to User
+                                    </Button>
+                                </Space>
+                            }>
+                            <Button
+                                size="small"
+                                type="text"
+                                icon={<SendOutlined style={{ color: '#9acc81' }} />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    // sendFile(fullPath);
+                                }}
+                            />
+                        </Popover>
+
+                    </div >
                 );
             },
         },

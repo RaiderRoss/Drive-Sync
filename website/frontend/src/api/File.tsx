@@ -40,8 +40,22 @@ export async function fetchFiles(directory?: string) {
 	return JSON.parse(text);
 }
 
-export function getDownloadUrl(filename: string) {
-	return `${API_BASE}/download/${encodeURIComponent(filename)}`.replace(/\/\/+/g, '/');
+export async function downloadFileApi(filename: string) {
+  const res = await fetch(`${API_BASE}/download/${encodeURIComponent(filename)}`, {
+    headers: getAuthHeaders(),
+  });
+
+  if (!res.ok) throw new Error('Download failed');
+
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+
+  window.URL.revokeObjectURL(url);
 }
 
 export async function deleteFileApi(filename: string) {
@@ -80,7 +94,7 @@ export function uploadAction(currentPath: string) {
 
 export default {
 	fetchFiles,
-	getDownloadUrl,
+	downloadFileApi,
 	deleteFileApi,
 	renameEntryApi,
 	uploadAction,

@@ -1,5 +1,4 @@
 use crate::auth::AuthUser;
-use crate::{HIDDEN_DIRS};
 use crate::util::{clean_path, get_user_path};
 use axum::Extension;
 use axum::{
@@ -33,8 +32,6 @@ pub async fn list_uploaded_files(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     path: Option<Path<String>>,
 ) -> Result<Json<Vec<FileEntry>>, StatusCode> {
-    let is_root = path.is_none();
-
     let target_dir = match path {
         Some(Path(p)) => clean_path(p, claims.user, claims.admin).ok_or(StatusCode::NOT_FOUND)?,
         None => PathBuf::from(get_user_path(claims.user, claims.admin)),
@@ -55,9 +52,6 @@ pub async fn list_uploaded_files(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     {
-        if is_root && HIDDEN_DIRS.get().unwrap().iter().any(|d| d.eq_ignore_ascii_case(&entry.file_name().to_string_lossy())) {
-            continue;
-        }
 
         let metadata = entry
             .metadata()
@@ -87,11 +81,13 @@ pub async fn list_uploaded_files(
         });
     }
 
-    println!("Found {} entries in directory", entries.len());
     Ok(Json(entries))
 }
 
-pub async fn download_file(Extension(AuthUser(claims)): Extension<AuthUser>,Path(filename): Path<String>) -> Result<impl IntoResponse, StatusCode> {
+pub async fn download_file(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Path(filename): Path<String>,
+) -> Result<impl IntoResponse, StatusCode> {
     let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
 
     path.push(&filename);

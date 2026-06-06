@@ -1,11 +1,10 @@
 use std::{
-    path::{Path, PathBuf},
-    sync::OnceLock,
+    fs::OpenOptions, io::Write, path::{Path, PathBuf}, sync::OnceLock
 };
 
 pub static UPLOAD_DIR: OnceLock<String> = OnceLock::new();
+pub static LOG_FILE: OnceLock<String> = OnceLock::new();
 pub const MAX_STORAGE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
-pub static HIDDEN_DIRS: OnceLock<Vec<String>> = OnceLock::new();
 pub static JWT_SECRET: OnceLock<String> = OnceLock::new();
 pub static JWT_DURATION_MINUTES: OnceLock<i64> = OnceLock::new();
 
@@ -21,8 +20,6 @@ pub fn clean_path(dir_path: String, user_id: String, is_admin: bool) -> Option<P
     }
 
     target_dir = target_dir.join(clean_path);
-
-
 
     return Some(target_dir);
 }
@@ -44,16 +41,10 @@ pub fn initialize_config() {
         .set(std::env::var("STORAGE_ROOT").unwrap())
         .expect("Failed to set UPLOAD_DIR");
 
-    HIDDEN_DIRS
-        .set(
-            std::env::var("HIDDEN_DIRECTORIES")
-                .unwrap_or_default()
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect(),
-        )
-        .expect("Failed to set HIDDEN_DIRECTORIES");
+    LOG_FILE
+        .set(format!("{}/{}", UPLOAD_DIR.get().unwrap(), std::env::var("LOG_FILE").unwrap()))
+        .expect("Failed to set LOG_FILE");
+
     JWT_SECRET
         .set(std::env::var("JWT_SECRET").unwrap())
         .expect("Failed to set JWT_SECRET");
@@ -66,4 +57,20 @@ pub fn initialize_config() {
                 .expect("Invalid JWT_DURATION_MINUTES"),
         )
         .expect("Failed to set JWT_DURATION_MINUTES");
+}
+
+pub fn log_actions(user_id: String, action: String, path: String) {
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    let log_entry = format!("{},{},{},{}\n", timestamp, user_id, action, path);
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(LOG_FILE.get().expect("LOG_FILE not set"))
+        .unwrap();
+
+    file.write_all(log_entry.as_bytes()).unwrap();
 }

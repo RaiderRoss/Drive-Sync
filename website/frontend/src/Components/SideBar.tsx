@@ -330,7 +330,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                     >
                         <div style={{ position: 'relative', width: 18, height: 18 }}>
                             <GiCircle size={18} color="#fff" />
-                            <HiPlus size={12} color="#7fc2d2ff" style={{
+                            <HiPlus size={12} color="rgb(130, 212, 151)" style={{
                                 position: 'absolute',
                                 top: '50%',
                                 left: '50%',
@@ -360,7 +360,7 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                         marginLeft: 10,
                     }}
 
-                    icon={<FaSignOutAlt />}
+                    icon={<FaSignOutAlt color="#e74c3c" />}
                     onClick={logout}
                 >
                     Logout

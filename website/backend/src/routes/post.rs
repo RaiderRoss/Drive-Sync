@@ -1,25 +1,47 @@
-use std::{fs::{self, File}, io::Write, path::PathBuf};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
 
-use axum::{Extension, Json, extract::{Multipart, Path}, http::StatusCode, response::IntoResponse};
+use axum::{
+    Extension, Json,
+    extract::{Multipart, Path},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::{auth::{AuthUser, Data}, routes::get::get_directory_size, util::{MAX_STORAGE_BYTES, get_user_path}};
+use crate::{
+    auth::{AuthUser, Data},
+    routes::get::get_directory_size,
+    util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
+};
 
-
-
-pub async fn upload_root(Extension(AuthUser(claims)): Extension<AuthUser>, multipart: Multipart) -> impl IntoResponse {
+pub async fn upload_root(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    multipart: Multipart,
+) -> impl IntoResponse {
     create_file(PathBuf::new(), multipart, claims).await
 }
 
-pub async fn upload_file(Extension(AuthUser(claims)): Extension<AuthUser>, Path(folder_path): Path<String>, multipart: Multipart) -> impl IntoResponse {
+pub async fn upload_file(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Path(folder_path): Path<String>,
+    multipart: Multipart,
+) -> impl IntoResponse {
     create_file(PathBuf::from(folder_path), multipart, claims).await
 }
 
-pub async fn create_file(relative_path: PathBuf, mut multipart: Multipart, user : Data) -> impl IntoResponse {
-    let upload_root = PathBuf::from(get_user_path(user.user, user.admin));
-    if let Err(e) = fs::create_dir_all(&upload_root) {
-        eprintln!("Failed to create upload root {}: {}", upload_root.display(), e);
+pub async fn create_file(
+    relative_path: PathBuf,
+    mut multipart: Multipart,
+    user: Data,
+) -> impl IntoResponse {
+    let user_id = user.user.clone();
+    let upload_root = PathBuf::from(get_user_path(user_id.clone(), user.admin));
+    if let Err(_) = fs::create_dir_all(&upload_root) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to prepare upload root",
@@ -31,8 +53,7 @@ pub async fn create_file(relative_path: PathBuf, mut multipart: Multipart, user 
     let full_path = upload_root.join(&file_path);
 
     if let Some(parent) = full_path.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!("Failed to create directory {}: {}", parent.display(), e);
+        if let Err(_) = fs::create_dir_all(parent) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create upload directory",
@@ -43,8 +64,7 @@ pub async fn create_file(relative_path: PathBuf, mut multipart: Multipart, user 
 
     let mut used_bytes = match get_directory_size(upload_root.clone()) {
         Ok(size) => size,
-        Err(e) => {
-            eprintln!("Failed to get directory size: {}", e);
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to check storage usage",
@@ -66,8 +86,7 @@ pub async fn create_file(relative_path: PathBuf, mut multipart: Multipart, user 
 
         let mut file = match File::create(&final_path) {
             Ok(f) => f,
-            Err(e) => {
-                eprintln!("Failed to create file {}: {}", final_path.display(), e);
+            Err(_) => {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create file")
                     .into_response();
             }
@@ -88,8 +107,7 @@ pub async fn create_file(relative_path: PathBuf, mut multipart: Multipart, user 
                     .into_response();
             }
 
-            if let Err(e) = file.write_all(&chunk) {
-                eprintln!("Failed to write file {}: {}", final_path.display(), e);
+            if let Err(_) = file.write_all(&chunk) {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file").into_response();
             }
 
@@ -97,10 +115,18 @@ pub async fn create_file(relative_path: PathBuf, mut multipart: Multipart, user 
         }
     }
 
+    log_actions(
+        user_id,
+        "upload".into(),
+        full_path.to_string_lossy().to_string(),
+    );
     (StatusCode::OK, "Files uploaded successfully").into_response()
 }
 
-pub async fn create_path(Extension(AuthUser(claims)): Extension<AuthUser>, Path(full_path): Path<String>) -> impl IntoResponse {
+pub async fn create_path(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Path(full_path): Path<String>,
+) -> impl IntoResponse {
     if full_path.contains("..") {
         return (
             StatusCode::BAD_REQUEST,
@@ -113,6 +139,8 @@ pub async fn create_path(Extension(AuthUser(claims)): Extension<AuthUser>, Path(
         return (StatusCode::BAD_REQUEST, "Path cannot be empty").into_response();
     }
 
+    let user_id = claims.user.clone();
+
     let upload_root = get_user_path(claims.user, claims.admin);
     let mut path_buf = PathBuf::from(upload_root);
     path_buf.push(full_path.trim_start_matches('/'));
@@ -120,18 +148,21 @@ pub async fn create_path(Extension(AuthUser(claims)): Extension<AuthUser>, Path(
     if full_path.ends_with('/') {
         match fs::create_dir_all(&path_buf) {
             Ok(_) => (StatusCode::OK, "Folder created successfully").into_response(),
-            Err(e) => {
-                eprintln!("Failed to create folder {}: {}", path_buf.display(), e);
+            Err(_) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create folder").into_response()
             }
         }
     } else {
         match fs::File::create(&path_buf) {
-            Ok(_) => (StatusCode::OK, "File created successfully").into_response(),
-            Err(e) => {
-                eprintln!("Failed to create file {}: {}", path_buf.display(), e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create file").into_response()
+            Ok(_) => {
+                log_actions(
+                    user_id,
+                    "create_file".into(),
+                    path_buf.to_string_lossy().to_string(),
+                );
+                (StatusCode::OK, "File created successfully").into_response()
             }
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create file").into_response(),
         }
     }
 }
@@ -142,7 +173,12 @@ pub struct RenamePayload {
     new_path: String,
 }
 
-pub async fn rename_path(Extension(AuthUser(claims)): Extension<AuthUser>,Json(payload): Json<RenamePayload>) -> impl IntoResponse {
+pub async fn rename_path(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Json(payload): Json<RenamePayload>,
+) -> impl IntoResponse {
+    let user_id = claims.user.clone();
+
     let upload_root = get_user_path(claims.user, claims.admin);
 
     if payload.old_path.trim().is_empty() || payload.new_path.trim().is_empty() {
@@ -186,12 +222,7 @@ pub async fn rename_path(Extension(AuthUser(claims)): Extension<AuthUser>,Json(p
     }
 
     if let Some(parent) = new_full.parent() {
-        if let Err(e) = fs::create_dir_all(parent) {
-            eprintln!(
-                "Failed to create destination parent {}: {}",
-                parent.display(),
-                e
-            );
+        if let Err(_) = fs::create_dir_all(parent) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to prepare destination",
@@ -201,15 +232,18 @@ pub async fn rename_path(Extension(AuthUser(claims)): Extension<AuthUser>,Json(p
     }
 
     match fs::rename(&old_full, &new_full) {
-        Ok(_) => (StatusCode::OK, "Path renamed successfully").into_response(),
-        Err(e) => {
-            eprintln!(
-                "Failed to rename {} -> {}: {}",
-                old_full.display(),
-                new_full.display(),
-                e
+        Ok(_) => {
+            log_actions(
+                user_id,
+                "rename".into(),
+                format!(
+                    "{} -> {}",
+                    old_full.to_string_lossy(),
+                    new_full.to_string_lossy()
+                ),
             );
-            (StatusCode::INTERNAL_SERVER_ERROR, "Failed to rename path").into_response()
+            (StatusCode::OK, "Path renamed successfully").into_response()
         }
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to rename path").into_response(),
     }
 }
