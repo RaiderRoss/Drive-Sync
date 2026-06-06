@@ -26,7 +26,7 @@ use crate::{
         get::{download_file, list_uploaded_files, stream_video},
         post::{create_path, rename_path, upload_file, upload_root},
     },
-    util::{HIDDEN_DIRS, initialize_config},
+    util::{HIDDEN_DIRS, UPLOAD_DIR, initialize_config},
 };
 
 type AppState = Arc<Data>;
@@ -41,7 +41,7 @@ async fn main() {
     initialize_config();
 
     let state: AppState = Arc::new(Data {
-        db: SqlitePool::connect("sqlite://users.db?mode=rwc")
+        db: SqlitePool::connect(&format!("sqlite://{}/users.db?mode=rwc", UPLOAD_DIR.get().unwrap()))
             .await
             .unwrap(),
     });
