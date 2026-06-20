@@ -1,6 +1,9 @@
+use crate::AppState;
 use crate::auth::AuthUser;
+use crate::db::get_shared_file_by_id;
 use crate::util::{clean_path, get_user_path};
 use axum::Extension;
+use axum::extract::State;
 use axum::{
     Json,
     body::Body,
@@ -52,7 +55,6 @@ pub async fn list_uploaded_files(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
     {
-
         let metadata = entry
             .metadata()
             .await
@@ -84,6 +86,42 @@ pub async fn list_uploaded_files(
     Ok(Json(entries))
 }
 
+pub async fn get_shared_file(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, StatusCode> {
+    let db = &state.db;
+    let filename = get_shared_file_by_id(db, &id).await;
+
+    if let Err(e) = filename {
+        if let sqlx::Error::RowNotFound = e {
+            return Ok((StatusCode::NOT_FOUND, "Share link is invalid").into_response());
+        }
+        return Ok((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to retrieve shared file",
+        )
+            .into_response());
+    }
+
+    let (owner_id, file_path) = filename.unwrap();
+
+    let path = PathBuf::from(get_user_path(owner_id, false)).join(&file_path);
+
+    if !path.exists() || !path.is_file() {
+        return Ok((StatusCode::NOT_FOUND, "File not found").into_response());
+    }
+
+    let ext = file_path.rsplit('.').next().unwrap_or("").to_lowercase();
+
+    if matches!(ext.as_str(), "mp4" | "webm" | "mkv" | "avi") {
+        return serve_video(path, headers, &ext).await.map(|r| r.into_response());
+    }
+
+    serve_file(path, file_path).await.map(|r| r.into_response())
+}
+
 pub async fn download_file(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Path(filename): Path<String>,
@@ -96,20 +134,56 @@ pub async fn download_file(
         return Err(StatusCode::NOT_FOUND);
     }
 
+    serve_file(path, filename).await
+}
+
+fn mime_type_for_ext(ext: &str) -> &'static str {
+    match ext {
+        "pdf" => "application/pdf",
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        "webp" => "image/webp",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "js" | "mjs" | "cjs" => "text/javascript; charset=utf-8",
+        "ts" | "tsx" | "jsx" => "text/plain; charset=utf-8",
+        "json" => "application/json",
+        "html" | "htm" => "text/html; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "md" | "markdown" => "text/markdown; charset=utf-8",
+        "txt" | "py" | "rb" | "java" | "cpp" | "c" | "sh" | "rs" | "go" | "php" => {
+            "text/plain; charset=utf-8"
+        }
+        _ => "application/octet-stream",
+    }
+}
+
+pub async fn serve_file(path: PathBuf, filename: String) -> Result<Response<Body>, StatusCode> {
     match File::open(&path).await {
         Ok(file) => {
             let stream = ReaderStream::new(file);
             let body = Body::from_stream(stream);
             let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
+            let content_type = mime_type_for_ext(&ext);
 
             let mut headers = HeaderMap::new();
 
-            if ext == "pdf" {
+            if matches!(content_type, "application/pdf")
+                || content_type.starts_with("image/")
+                || content_type.starts_with("video/")
+                || content_type.starts_with("audio/")
+            {
                 headers.insert(
                     "Content-Disposition",
                     HeaderValue::from_str(&format!("inline; filename=\"{}\"", filename)).unwrap(),
                 );
-                headers.insert("Content-Type", HeaderValue::from_static("application/pdf"));
             } else {
                 headers.insert(
                     "Content-Disposition",
@@ -118,7 +192,13 @@ pub async fn download_file(
                 );
             }
 
-            Ok((headers, body).into_response())
+            headers.insert(
+                "Content-Type",
+                HeaderValue::from_str(content_type).unwrap(),
+            );
+
+            let response = (headers, body).into_response();
+            Ok(response)
         }
         Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
     }
@@ -136,16 +216,49 @@ pub async fn stream_video(
         return Err(StatusCode::NOT_FOUND);
     }
 
+    let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
+    serve_video(path, headers, &ext).await
+}
+
+pub async fn serve_video(
+    path: PathBuf,
+    headers: HeaderMap,
+    ext: &str,
+) -> Result<Response<Body>, StatusCode> {
     let metadata = tokio::fs::metadata(&path)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     let file_size = metadata.len();
 
+    let content_type = match ext {
+        "webm" => "video/webm",
+        "mkv" => "video/x-matroska",
+        "avi" => "video/x-msvideo",
+        _ => "video/mp4",
+    };
+
     let range_header = headers
         .get(header::RANGE)
         .and_then(|v| v.to_str().ok())
-        .filter(|s| s.starts_with("bytes="))
-        .ok_or(StatusCode::RANGE_NOT_SATISFIABLE)?;
+        .filter(|s| s.starts_with("bytes="));
+
+    let range_header = match range_header {
+        Some(r) => r,
+        None => {
+            let file = File::open(&path)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let stream = ReaderStream::new(file);
+            let response = Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, content_type)
+                .header(header::ACCEPT_RANGES, "bytes")
+                .header(header::CONTENT_LENGTH, file_size.to_string())
+                .body(axum::body::Body::from_stream(stream))
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            return Ok(response);
+        }
+    };
 
     let parts: Vec<&str> = range_header[6..].split('-').collect();
     let start: u64 = parts.get(0).and_then(|v| v.parse().ok()).unwrap_or(0);
@@ -177,7 +290,7 @@ pub async fn stream_video(
 
     let response = Response::builder()
         .status(StatusCode::PARTIAL_CONTENT)
-        .header(header::CONTENT_TYPE, "video/mp4")
+        .header(header::CONTENT_TYPE, content_type)
         .header(header::CONTENT_RANGE, content_range)
         .header(header::ACCEPT_RANGES, "bytes")
         .header(header::CONTENT_LENGTH, chunk_size.to_string())

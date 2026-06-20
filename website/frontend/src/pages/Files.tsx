@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Table, Typography, Spin, Button, message, Breadcrumb, Dropdown, Modal, Input, Upload as AntUpload, Popover, Space } from 'antd';
+import { Table, Typography, Spin, Button, Breadcrumb, Dropdown, Modal, Input, Upload as AntUpload, Popover, Space } from 'antd';
 import { DownloadOutlined, DeleteOutlined, FileFilled, FolderAddOutlined, UploadOutlined, SendOutlined, LinkOutlined, UserOutlined, EditOutlined } from '@ant-design/icons';
 import { FcFolder } from 'react-icons/fc';
 import { FaFilePdf, FaFileAudio, FaFileImage, FaFileVideo, FaFileArchive, FaFileCode, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
@@ -10,6 +10,7 @@ import { useRefresh } from '../contexts/RefreshContext';
 import UploadArea from '../Components/Upload';
 import * as FileAPI from '../api/File';
 import { downloadFileApi } from '../api/File';
+import { useAlert } from '../Components/Alert';
 const { Text } = Typography;
 
 interface FileEntry {
@@ -23,6 +24,7 @@ interface FileEntry {
 export default function Files() {
     const location = useLocation();
     const { triggerRefresh, refreshTrigger } = useRefresh();
+    const alert = useAlert();
 
     const directory = location.pathname.startsWith('/files/')
         ? decodeURIComponent(location.pathname.replace(/^\/files\/?/, '')) || undefined
@@ -44,6 +46,8 @@ export default function Files() {
         setRenameOpen(true);
     };
 
+
+
     const renameEntry = async () => {
         if (!renameTarget || !renameValue.trim()) return;
 
@@ -51,13 +55,27 @@ export default function Files() {
         const newPath = base ? `${base}/${renameValue}` : renameValue;
         try {
             await FileAPI.renameEntryApi(renameTarget.oldPath, newPath);
-            message.success('Renamed.');
+            alert.success('Renamed.');
             setRenameOpen(false);
             fetchFiles();
             triggerRefresh();
         } catch (err) {
             console.error('Rename failed', err);
-            message.error('Rename failed.');
+            alert.error('Rename failed.');
+        }
+    };
+
+    const createShareLink = async (filePath: string) => {
+        try {
+            console.log('Creating share link for:', filePath);
+            let link = await FileAPI.createShareLink(filePath);
+            const fullLink = `${window.location.origin}/share/${link}`;
+            console.log('Share link created:', fullLink);
+            await navigator.clipboard.writeText(fullLink);
+            alert.success('Share link created and copied to clipboard!');
+        } catch (err) {
+            console.error('Failed to create share link', err);
+            alert.error('Failed to create share link.');
         }
     };
 
@@ -68,7 +86,7 @@ export default function Files() {
             setFiles(data);
         } catch (err) {
             console.error('Failed to fetch or parse JSON:', err);
-            message.error('Could not load files.');
+            alert.error('Could not load files.');
         } finally {
             setLoading(false);
         }
@@ -81,11 +99,11 @@ export default function Files() {
     const deleteFile = async (filename: string) => {
         try {
             await FileAPI.deleteFileApi(filename);
-            message.success(`Deleted: ${filename}`);
+            alert.success(`Deleted: ${filename}`);
             fetchFiles();
         } catch (err) {
             console.error('Delete failed', err);
-            message.error(`Delete failed`);
+            alert.error(`Delete failed`);
         }
     };
 
@@ -118,9 +136,9 @@ export default function Files() {
         showUploadList: false,
         onChange(info) {
             if (info.file.status === 'done') {
-                message.success(`${info.file.name} file uploaded successfully`);
+                alert.success(`${info.file.name} file uploaded successfully`);
             } else if (info.file.status === 'error') {
-                message.error(`${info.file.name} file upload failed.`);
+                alert.error(`${info.file.name} file upload failed.`);
             }
 
             checkAllUploadsComplete(info.fileList);
@@ -355,16 +373,68 @@ export default function Files() {
                 return (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 20, width: '100%' }}>
                         {!record.is_dir && (
-                            <Button
-                                size="small"
-                                type="text"
-                                icon={<DownloadOutlined style={{ color: "#7782b4" }} />}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    downloadFileApi(fullPath);
-                                }}
-                                style={{ color: '#b3b3b3' }}
-                            />
+                            <>
+
+
+                                <Button
+                                    size="small"
+                                    type="text"
+                                    icon={<DownloadOutlined style={{ color: "#7782b4" }} />}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        downloadFileApi(fullPath);
+                                    }}
+                                    style={{ color: '#b3b3b3' }}
+                                />
+
+
+                                <Popover
+                                    overlayStyle={{
+                                        "--antd-arrow-background-color": "#313131",
+                                    } as React.CSSProperties}
+                                    trigger="click"
+                                    placement="bottomRight"
+                                    styles={{
+                                        body: {
+                                            background: "#313131",
+                                            color: "#fff",
+                                        },
+                                    }}
+                                    content={
+                                        <Space direction="vertical" style={{ width: 160 }}>
+                                            <Button
+                                                block
+                                                icon={<LinkOutlined />}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    createShareLink(fullPath);
+                                                }}
+                                            >
+                                                Create Link
+                                            </Button>
+
+                                            <Button
+                                                block
+                                                icon={<UserOutlined />}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                }}
+                                            >
+                                                Send to User
+                                            </Button>
+                                        </Space>
+                                    }>
+                                    <Button
+                                        size="small"
+                                        type="text"
+                                        icon={<SendOutlined style={{ color: '#9acc81' }} />}
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                        }}
+                                    />
+                                </Popover>
+                            </>
+
                         )}
 
                         <Button
@@ -392,47 +462,7 @@ export default function Files() {
                         />
 
 
-                        <Popover
-                            overlayStyle={{
-                                "--antd-arrow-background-color": "#313131",
-                            } as React.CSSProperties}
-                            trigger="click"
-                            placement="bottomRight"
-                            styles={{
-                                body: {
-                                    background: "#313131",
-                                    color: "#fff",
-                                },
-                            }}
-                            content={
-                                <Space direction="vertical" style={{ width: 160 }}>
-                                    <Button
-                                        block
-                                        icon={<LinkOutlined />}
-                                    // onClick={() => createShareLink(fullPath)}
-                                    >
-                                        Create Link
-                                    </Button>
 
-                                    <Button
-                                        block
-                                        icon={<UserOutlined />}
-                                    // onClick={() => openSendToUserModal(fullPath)}
-                                    >
-                                        Send to User
-                                    </Button>
-                                </Space>
-                            }>
-                            <Button
-                                size="small"
-                                type="text"
-                                icon={<SendOutlined style={{ color: '#9acc81' }} />}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    // sendFile(fullPath);
-                                }}
-                            />
-                        </Popover>
 
                     </div >
                 );
@@ -539,4 +569,3 @@ export default function Files() {
         </div>
     );
 };
-

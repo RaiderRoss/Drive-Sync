@@ -14,6 +14,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const API_BASE = "/api";
 
+const isPublicPath = (pathname: string): boolean => {
+    if (pathname === "/login" || pathname === "/register") return true;
+    if (pathname.startsWith("/share/")) return true;
+    return false;
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const navigate = useNavigate();
     const currentPath = window.location.pathname;
@@ -50,7 +56,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedToken = localStorage.getItem("token");
 
         if (!storedToken) {
-            if (currentPath !== "/register") {
+            if (!isPublicPath(currentPath)) {
                 navigate("/login");
             }
             return;
@@ -66,7 +72,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setToken(null);
                 setIsAdmin(null);
                 setUserId(null);
-                navigate("/login");
+                if (!isPublicPath(currentPath)) {
+                    navigate("/login");
+                }
             }
         };
 

@@ -2,11 +2,7 @@ use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
 pub async fn setup_db(db: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        " CREATE TABLE IF NOT EXISTS users ( id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL, is_admin BOOLEAN NOT NULL) ",
-    )
-    .execute(db)
-    .await?;
+    sqlx::migrate!().run(db).await?;
     Ok(())
 }
 
@@ -17,32 +13,84 @@ pub async fn create_user(
     is_admin: bool,
 ) -> Result<String, sqlx::Error> {
     loop {
-        println!("Attempting to create user: {}", username);
         let id = Uuid::new_v4().to_string();
         let user = get_user_by_username(db, username).await;
-        
+
         if user.is_ok() {
             return Err(sqlx::Error::RowNotFound);
         }
-        
-        let result =
-            sqlx::query("INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, ?)")
-                .bind(&id)
-                .bind(username)
-                .bind(password_hash)
-                .bind(is_admin)
-                .execute(db)
-                .await;
+
+        let result = sqlx::query(
+            "INSERT INTO users (id, username, password_hash, is_admin) VALUES (?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(username)
+        .bind(password_hash)
+        .bind(is_admin)
+        .execute(db)
+        .await;
 
         match result {
             Ok(_) => return Ok(id),
             Err(sqlx::Error::Database(err)) if err.is_unique_violation() => {
-                println!("UUID collision detected, retrying...");
                 continue;
             }
             Err(err) => return Err(err),
         }
     }
+}
+
+pub async fn create_shared_file(
+    db: &SqlitePool,
+    owner_id: &str,
+    file_path: &str,
+) -> Result<String, sqlx::Error> {
+    let id = Uuid::new_v4().to_string();
+    sqlx::query("INSERT INTO shared_files (id, owner_id, file_path) VALUES (?, ?, ?)")
+        .bind(&id)
+        .bind(owner_id)
+        .bind(file_path)
+        .execute(db)
+        .await?;
+    Ok(id)
+}
+
+pub async fn check_shared_file_exists(db: &SqlitePool, owner_id: &str, file_path: &str) -> Result<bool, sqlx::Error> {
+    let row = sqlx::query("SELECT COUNT(*) FROM shared_files WHERE owner_id = ? AND file_path = ?")
+        .bind(owner_id)
+        .bind(file_path)
+        .fetch_one(db)
+        .await?;
+    let count: i64 = row.get(0);
+    Ok(count > 0)
+}
+
+pub async fn get_shared_file_by_id(
+    db: &SqlitePool,
+    id: &str,
+) -> Result<(String, String), sqlx::Error> {
+    let row = sqlx::query("SELECT owner_id, file_path FROM shared_files WHERE id = ?")
+        .bind(id)
+        .fetch_one(db)
+        .await?;
+    let owner_id: String = row.get(0);
+    let file_path: String = row.get(1);
+    Ok((owner_id, file_path))
+}
+
+pub async fn change_shared_file_path(
+    db: &SqlitePool,
+    owner_id: &str,
+    file_path: &str,
+    new_file_path: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query("UPDATE shared_files SET file_path = ? WHERE owner_id = ? AND file_path = ?")
+        .bind(new_file_path)
+        .bind(owner_id)
+        .bind(file_path)
+        .execute(db)
+        .await?;
+    Ok(())
 }
 
 pub async fn get_user_by_username(

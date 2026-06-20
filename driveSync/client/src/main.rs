@@ -31,9 +31,7 @@ pub mod ui;
 pub mod util;
 
 use crate::{
-    config::CONFIG,
-    ui::Counter,
-    util::{IN_MEMORY_EVENTS, IS_ANALYSING_LOGS, analyse_logs},
+    config::CONFIG, connection::{connect_to_ws, create_socket}, ui::Counter, util::{IN_MEMORY_EVENTS, IS_ANALYSING_LOGS, analyse_logs}
 };
 
 
@@ -70,16 +68,20 @@ fn run_ui(socket: Arc<Mutex<Option<WebSocket<MaybeTlsStream<TcpStream>>>>>) {
     let icon_bytes = include_bytes!("../logo.png");
     let icon = window::icon::from_file_data(icon_bytes, None).unwrap();
 
-    let _ = iced::application("Drive Sync", Counter::update, Counter::view)
-        .theme(|c: &Counter| c.current_theme())
-        .window(window::Settings {
-            position: Position::Centered,
-            resizable: false,
-            size: Size::new(300.0, 400.0),
-            icon: Some(icon),
-            ..Default::default()
-        })
-        .run_with(move || (Counter::new(socket.clone()), iced::Task::none()));
+    let _ = iced::application(
+        move || (Counter::new(socket.clone()), iced::Task::none()),
+        Counter::update,
+        Counter::view,
+    )
+    .title("Drive Sync")
+    .window(window::Settings {
+        position: Position::Centered,
+        resizable: false,
+        size: Size::new(300.0, 400.0),
+        icon: Some(icon),
+        ..Default::default()
+    })
+    .run();
 }
 
 fn write_to_changes(event: Event) {
@@ -128,11 +130,11 @@ async fn main() {
         }
     });
 
-    // let socket = create_socket();
-    // let sock_clone = socket.clone();
-    // connect_to_ws(sock_clone);
+    let socket = create_socket();
+    let sock_clone = socket.clone();
+    connect_to_ws(sock_clone);
 
-    // run_ui(socket);
+    run_ui(socket);
 
     let _ = tokio::join!(t1, t2);
 }

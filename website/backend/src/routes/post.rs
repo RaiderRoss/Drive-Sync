@@ -6,15 +6,18 @@ use std::{
 
 use axum::{
     Extension, Json,
-    extract::{Multipart, Path},
+    extract::{Multipart, Path, State},
     http::StatusCode,
     response::IntoResponse,
 };
 use serde::Deserialize;
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
+    AppState,
     auth::{AuthUser, Data},
+    db::{change_shared_file_path, check_shared_file_exists, create_shared_file},
     routes::get::get_directory_size,
     util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
 };
@@ -32,6 +35,47 @@ pub async fn upload_file(
     multipart: Multipart,
 ) -> impl IntoResponse {
     create_file(PathBuf::from(folder_path), multipart, claims).await
+}
+
+pub async fn create_shared_path(
+    State(state): State<AppState>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Json(path): Json<Value>,
+) -> impl IntoResponse {
+    let data = path.get("path").and_then(|p| p.as_str()).unwrap_or("");
+    let owner_id = claims.user.clone();
+
+    let exists = check_shared_file_exists(&state.db, &owner_id, data).await;
+    match exists {
+        Ok(true) => {
+            return (
+                StatusCode::CONFLICT,
+                "Shared link for this path already exists",
+            )
+                .into_response();
+        }
+        Ok(false) => {}
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to check existing shared links",
+            )
+                .into_response();
+        }
+    }
+
+    let id = create_shared_file(&state.db, &owner_id, data).await;
+    match id {
+        Ok(id) => {
+            log_actions(owner_id, "create_shared_link".into(), data.to_string());
+            (StatusCode::OK, Json(Value::String(id))).into_response()
+        }
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create shared link",
+        )
+            .into_response(),
+    }
 }
 
 pub async fn create_file(
@@ -174,6 +218,7 @@ pub struct RenamePayload {
 }
 
 pub async fn rename_path(
+    State(state): State<AppState>,
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(payload): Json<RenamePayload>,
 ) -> impl IntoResponse {
@@ -201,6 +246,12 @@ pub async fn rename_path(
         || std::path::Path::new(&payload.new_path).is_absolute()
     {
         return (StatusCode::BAD_REQUEST, "Absolute paths are not allowed").into_response();
+    }
+
+    let db = &state.db;
+
+    if let Ok(true) = check_shared_file_exists(db, &user_id, &payload.old_path).await {
+        let _ = change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path).await;
     }
 
     let mut old_full = PathBuf::from(&upload_root);

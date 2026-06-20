@@ -16,12 +16,32 @@ export function getAuthHeaders() {
 	return headers;
 }
 
+export async function createShareLink(filePath: string) {
+	const url = `${API_BASE}/share`;
+	const res = await fetch(url, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			...getAuthHeaders(),
+		},
+		body: JSON.stringify({ path: filePath }),
+	});
+
+	if (!res.ok) {
+		const text = await res.text();
+		throw new Error(text || 'Failed to create share link');
+	}
+
+	const text = await res.text();
+	return JSON.parse(text);
+}
+
 export async function fetchFiles(directory?: string) {
 	console.log('Fetching files with auth token:', getAuthToken());
 	const url = directory
 		? `${API_BASE}/uploads/${encodeURIComponent(directory)}`
 		: `${API_BASE}/uploads`;
-		console.log('Constructed URL for fetching files:', url);
+	console.log('Constructed URL for fetching files:', url);
 
 	const res = await fetch(url, {
 		headers: {
@@ -41,21 +61,21 @@ export async function fetchFiles(directory?: string) {
 }
 
 export async function downloadFileApi(filename: string) {
-  const res = await fetch(`${API_BASE}/download/${encodeURIComponent(filename)}`, {
-    headers: getAuthHeaders(),
-  });
+	const res = await fetch(`${API_BASE}/download/${encodeURIComponent(filename)}`, {
+		headers: getAuthHeaders(),
+	});
 
-  if (!res.ok) throw new Error('Download failed');
+	if (!res.ok) throw new Error('Download failed');
 
-  const blob = await res.blob();
-  const url = window.URL.createObjectURL(blob);
+	const blob = await res.blob();
+	const url = window.URL.createObjectURL(blob);
 
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = filename;
+	a.click();
 
-  window.URL.revokeObjectURL(url);
+	window.URL.revokeObjectURL(url);
 }
 
 export async function deleteFileApi(filename: string) {

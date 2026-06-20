@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Spin, Alert, Breadcrumb, Input, Button, message } from 'antd';
+import { Spin, Alert as AntdAlert, Breadcrumb, Input, Button } from 'antd';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { getAuthHeaders } from '../api/File';
+import { useAlert } from '../Components/Alert';
 
 const { TextArea } = Input;
 
@@ -32,8 +33,22 @@ const extensionToLanguage: Record<string, string> = {
 export default function FileViewer() {
     const location = useLocation();
     const navigate = useNavigate();
-    const rawPath = location.pathname.replace(/^\/file\//, '');
+    const alert = useAlert();
+    const API_BASE = '/api';
+
+    const isShare = location.pathname.startsWith('/share');
+
+    const rawPath = isShare
+        ? location.pathname.replace(/^\/share\//, '')
+        : location.pathname.startsWith('/file')
+            ? location.pathname.replace(/^\/file\//, '')
+            : '';
+
     const filename = decodeURIComponent(rawPath);
+
+    const fileUrl = isShare
+        ? `${API_BASE}/share/${encodeURIComponent(filename)}`
+        : `${API_BASE}/download/${encodeURIComponent(filename)}`;
 
     const [content, setContent] = useState<string | null>(null);
     const [editedContent, setEditedContent] = useState<string>('');
@@ -43,9 +58,6 @@ export default function FileViewer() {
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-
-    const API_BASE = '/api';
-    const fileUrl = `${API_BASE}/download/${encodeURIComponent(filename)}`;
 
     const getMediaMimeType = (ext?: string) => {
         switch (ext) {
@@ -82,70 +94,103 @@ export default function FileViewer() {
     };
 
     useEffect(() => {
-        const ext = filename.split('.').pop()?.toLowerCase();
+        // For /file/:path the filename in the URL is real and has an
+        // extension we can trust as a hint. For /share/:id the "filename"
+        // is actually a share UUID with no extension — the real file type
+        // is only known server-side. So we always do a single fetch and
+        // classify the result by the response's Content-Type header
+        // (which serve_file/serve_video already set correctly), falling
+        // back to the URL extension only as a hint for syntax highlighting
+        // language on text files.
         let objectUrl: string | null = null;
+        let cancelled = false;
 
-        if (!ext) {
-            setFileType('text');
-            setHighlightLang('text');
-        } else {
-            const isImage = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(ext);
-            const isVideo = ['mp4', 'webm', 'mkv', 'avi'].includes(ext);
-            const isAudio = ['mp3', 'wav', 'ogg'].includes(ext);
-            const isPdf = ext === 'pdf';
+        setLoading(true);
+        setError(null);
+        setContent(null);
+        setPreviewSrc(null);
 
-            if (isImage || isVideo || isAudio || isPdf) {
-                setFileType(isImage ? 'image' : isVideo ? 'video' : isAudio ? 'audio' : 'pdf');
-                setHighlightLang('text');
-                setPreviewSrc(null);
+        const urlExt = filename.includes('.') ? filename.split('.').pop()!.toLowerCase() : '';
 
-                fetch(fileUrl, {
-                    headers: getAuthHeaders(),
-                })
-                    .then(res => {
-                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                        return res.arrayBuffer();
-                    })
-                    .then(buffer => {
-                        const blob = new Blob([buffer], { type: getMediaMimeType(ext) });
-                        objectUrl = URL.createObjectURL(blob);
-                        setPreviewSrc(objectUrl);
-                    })
-                    .catch(err => {
-                        console.error('Media fetch error:', err);
-                        setError('Could not load file content.');
-                    })
-                    .finally(() => setLoading(false));
+        const classify = (contentType: string, disposition: string | null): 'image' | 'video' | 'audio' | 'pdf' | 'text' => {
+            const type = contentType.toLowerCase();
 
-                return () => {
-                    if (objectUrl) {
-                        URL.revokeObjectURL(objectUrl);
-                    }
-                };
+            // Prefer the real filename from Content-Disposition if the server sent one
+            // (useful for /share where the URL itself has no extension).
+            let realExt = urlExt;
+            if (disposition) {
+                const match = disposition.match(/filename="?([^"]+)"?/i);
+                if (match && match[1].includes('.')) {
+                    realExt = match[1].split('.').pop()!.toLowerCase();
+                }
             }
 
-            setFileType('text');
-            setHighlightLang(extensionToLanguage[ext] || extensionToLanguage.default);
+            if (type.startsWith('image/')) return 'image';
+            if (type.startsWith('video/')) return 'video';
+            if (type.startsWith('audio/')) return 'audio';
+            if (type.includes('pdf')) return 'pdf';
 
-            fetch(fileUrl, {
-                headers: getAuthHeaders(),
+            // Content-Type was generic (e.g. application/octet-stream) — fall
+            // back to whatever extension we have.
+            if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(realExt)) return 'image';
+            if (['mp4', 'webm', 'mkv', 'avi'].includes(realExt)) return 'video';
+            if (['mp3', 'wav', 'ogg'].includes(realExt)) return 'audio';
+            if (realExt === 'pdf') return 'pdf';
+            return 'text';
+        };
+
+        fetch(fileUrl, {
+            headers: getAuthHeaders(),
+        })
+            .then(async res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (cancelled) return;
+
+                const contentType = res.headers.get('Content-Type') || '';
+                const disposition = res.headers.get('Content-Disposition');
+                const kind = classify(contentType, disposition);
+
+                if (kind === 'text') {
+                    const text = await res.text();
+                    if (cancelled) return;
+                    setFileType('text');
+                    // Use Content-Disposition filename if we got one, else URL extension.
+                    let langExt = urlExt;
+                    if (disposition) {
+                        const match = disposition.match(/filename="?([^"]+)"?/i);
+                        if (match && match[1].includes('.')) {
+                            langExt = match[1].split('.').pop()!.toLowerCase();
+                        }
+                    }
+                    setHighlightLang(extensionToLanguage[langExt] || extensionToLanguage.default);
+                    setContent(text);
+                    setEditedContent(text);
+                } else {
+                    const buffer = await res.arrayBuffer();
+                    if (cancelled) return;
+                    const blob = new Blob([buffer], { type: contentType || getMediaMimeType(urlExt) });
+                    objectUrl = URL.createObjectURL(blob);
+                    setFileType(kind);
+                    setHighlightLang('text');
+                    setPreviewSrc(objectUrl);
+                }
             })
-                .then(res => {
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    return res.text();
-                })
-                .then(data => {
-                    setContent(data);
-                    setEditedContent(data);
-                })
-                .catch(err => {
-                    console.error('Text fetch error:', err);
-                    setError('Could not load file content.');
-                })
-                .finally(() => setLoading(false));
-        }
+            .catch(err => {
+                if (cancelled) return;
+                console.error('File fetch error:', err);
+                setError('Could not load file content.');
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false);
+            });
 
-        return undefined;
+        return () => {
+            cancelled = true;
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filename]);
 
     const handleSave = async () => {
@@ -165,18 +210,17 @@ export default function FileViewer() {
 
             console.log('Save response:', res);
             if (res.ok) {
-                message.success('File saved successfully');
+                alert.success('File saved successfully');
                 setContent(editedContent);
                 setIsEditing(false);
             } else {
-                message.error(`Save failed: ${res.status}`);
+                alert.error(`Save failed: ${res.status}`);
             }
         } catch (err) {
             console.error('Save error:', err);
-            message.error('Save failed');
+            alert.error('Save failed');
         }
     };
-
 
     const pathParts = filename.split('/');
     const breadcrumbItems = [
@@ -205,7 +249,7 @@ export default function FileViewer() {
     ];
 
     if (loading) return <Spin style={{ display: 'block', margin: '100px auto' }} />;
-    if (error) return <Alert message="Error" description={error} type="error" showIcon />;
+    if (error) return <AntdAlert message="Error" description={error} type="error" showIcon />;
 
     return (
         <div style={{
@@ -223,8 +267,8 @@ export default function FileViewer() {
                 paddingRight: 16,
                 paddingLeft: window.innerWidth <= 768 ? 60 : 16,
             }}>
-                <Breadcrumb 
-                    items={breadcrumbItems} 
+                <Breadcrumb
+                    items={breadcrumbItems}
                     separator="/"
                     style={{ paddingLeft: window.innerWidth <= 768 ? 0 : 0 }}
                 />
@@ -318,6 +362,7 @@ export default function FileViewer() {
                 {fileType === 'video' && (
                     <video
                         controls
+                        preload="metadata"
                         style={{
                             width: '100%',
                             height: '100%',
@@ -341,6 +386,7 @@ export default function FileViewer() {
                     >
                         <audio
                             controls
+                            preload="metadata"
                             style={{
                                 width: '100%',
                                 outline: 'none',

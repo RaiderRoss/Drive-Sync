@@ -17,6 +17,7 @@ export default function Auth() {
     const [mode, setMode] = useState<"login" | "register">(
         isLoginRoute ? "login" : "register"
     );
+    
     const [registerForm] = Form.useForm();
     const passwordValue = Form.useWatch("password", registerForm) || "";
 

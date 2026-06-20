@@ -23,8 +23,8 @@ use crate::{
     db::setup_db,
     routes::{
         delete::delete_file,
-        get::{download_file, list_uploaded_files, stream_video},
-        post::{create_path, rename_path, upload_file, upload_root},
+        get::{download_file, get_shared_file, list_uploaded_files, stream_video},
+        post::{create_path, create_shared_path, rename_path, upload_file, upload_root},
     },
     util::{UPLOAD_DIR, initialize_config},
 };
@@ -41,15 +41,18 @@ async fn main() {
     initialize_config();
 
     let state: AppState = Arc::new(Data {
-        db: SqlitePool::connect(&format!("sqlite://{}/users.db?mode=rwc", UPLOAD_DIR.get().unwrap()))
-            .await
-            .unwrap(),
+        db: SqlitePool::connect(&format!(
+            "sqlite://{}/users.db?mode=rwc",
+            UPLOAD_DIR.get().unwrap()
+        ))
+        .await
+        .unwrap(),
     });
 
     let err = setup_db(&state.db).await;
 
     if let Err(e) = err {
-        eprintln!("Failed to initialize database: {}", e);
+
         return;
     }
 
@@ -76,12 +79,14 @@ pub fn create_router(state: AppState) -> Router {
         .route("/create_path/{*path}", post(create_path))
         .route("/delete/{*path}", delete(delete_file))
         .route("/rename", post(rename_path))
+        .route("/share", post(create_shared_path))
         .layer(middleware::from_fn(auth_middleware));
 
     Router::new()
         .route("/login", post(login))
         .route("/register", post(register_user))
         .route("/auth", get(get_auth))
+        .route("/share/{*path}", get(get_shared_file))
         .merge(protected_routes)
         .layer(cors)
         .with_state(state)

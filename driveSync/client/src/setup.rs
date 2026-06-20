@@ -2,12 +2,12 @@ use std::fs::File;
 use std::io::Write;
 
 use iced::{
-    Size, Theme,
+    Theme,
     alignment::Horizontal,
-    widget::{Row, button, column, text},
-    window::{self, Position},
+    widget::{Row, button, column, text}
 };
 use rfd::FileDialog;
+#[derive(Default)]
 pub struct SetUp {
     storage_path: String,
     dark_mode: bool,
@@ -59,7 +59,9 @@ impl SetUp {
                     let _ = file.unwrap().write(
                         format!(
                             "storage_path=\"{}\"\nlog_path = \"{}\"\nchanges_path = \"{}\"",
-                            self.storage_path.replace("\\", "/"), log_path, changes_path
+                            self.storage_path.replace("\\", "/"),
+                            log_path,
+                            changes_path
                         )
                         .as_bytes(),
                     );
@@ -77,17 +79,18 @@ impl SetUp {
     }
 }
 
-pub fn run_setup() {
+pub fn run_setup() -> iced::Result {
     let icon_bytes = include_bytes!("../logo.png");
-    let icon = window::icon::from_file_data(icon_bytes, None).unwrap();
-    let _ = iced::application("Drive Sync", SetUp::update, SetUp::view)
-        .theme(|c: &SetUp| c.current_theme())
-        .window(window::Settings {
-            position: Position::Centered,
+    let icon = iced::window::icon::from_file_data(icon_bytes, None).unwrap();
+
+    iced::application(SetUp::new, SetUp::update, SetUp::view)
+        .title("Drive Sync")
+        .window(iced::window::Settings {
+            size: iced::Size::new(300.0, 300.0),
             resizable: false,
-            size: Size::new(300.0, 300.0),
+            position: iced::window::Position::Centered,
             icon: Some(icon),
             ..Default::default()
         })
-        .run_with(move || (SetUp::new(), iced::Task::none()));
+        .run()
 }
