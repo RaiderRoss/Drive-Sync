@@ -193,6 +193,15 @@ export default function FileViewer() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filename]);
 
+    useEffect(() => {
+        if (fileType === 'pdf' && previewSrc && window.innerWidth <= 768) {
+            // Auto-open immediately once the blob is ready. Chrome may
+            // silently block this since it's not inside a direct click
+            // handler — the fallback button below covers that case.
+            window.open(previewSrc, '_blank');
+        }
+    }, [fileType, previewSrc]);
+
     const handleSave = async () => {
         try {
             const formData = new FormData();
@@ -311,7 +320,7 @@ export default function FileViewer() {
                                 </Button>
                             </>
                         ) : (
-                            <Button onClick={() => setIsEditing(true)}>Edit</Button>
+                            !isShare && <Button onClick={() => setIsEditing(true)}>Edit</Button>
                         )}
                     </div>
                 </div>
@@ -325,25 +334,54 @@ export default function FileViewer() {
                 justifyContent: 'center',
                 alignItems: 'center',
             }}>
-                {fileType === 'pdf' && (
-                    <div
-                        style={{
-                            width: '100%',
-                            height: '100%',
-                            background: '#2b2b2b',
-                            overflow: 'hidden',
-                        }}
-                    >
-                        <iframe
-                            title="PDF Viewer"
-                            src={previewSrc || ''}
+                {fileType === 'pdf' && previewSrc && (
+                    window.innerWidth <= 768 ? (
+                        // Mobile Chrome/Android won't reliably render a blob:
+                        // URL embedded in an <iframe> — the native PDF
+                        // viewer plugin only behaves correctly on a real,
+                        // top-level page load. The useEffect above already
+                        // tried window.open() automatically; this button is
+                        // the fallback in case the browser silently blocked
+                        // that auto-open as a popup.
+                        <div
+                            style={{
+                                display: 'flex',
+                                flexDirection: 'column',
+                                alignItems: 'center',
+                                gap: 16,
+                                padding: 32,
+                            }}
+                        >
+                            <span style={{ color: '#b3b3b3', fontSize: 14, textAlign: 'center' }}>
+                                Opening PDF in a new tab… if nothing happened, tap below.
+                            </span>
+                            <Button
+                                type="primary"
+                                onClick={() => window.open(previewSrc, '_blank')}
+                            >
+                                Open PDF
+                            </Button>
+                        </div>
+                    ) : (
+                        <div
                             style={{
                                 width: '100%',
                                 height: '100%',
-                                border: 'none',
+                                background: '#2b2b2b',
+                                overflow: 'hidden',
                             }}
-                        />
-                    </div>
+                        >
+                            <iframe
+                                title="PDF Viewer"
+                                src={previewSrc}
+                                style={{
+                                    width: '100%',
+                                    height: '100%',
+                                    border: 'none',
+                                }}
+                            />
+                        </div>
+                    )
                 )}
 
                 {fileType === 'image' && (
