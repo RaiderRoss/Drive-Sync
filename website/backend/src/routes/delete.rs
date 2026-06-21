@@ -1,8 +1,15 @@
-use axum::{Extension, extract::Path, http::StatusCode, response::IntoResponse};
+use axum::{
+    Extension,
+    extract::{Path, State},
+    http::StatusCode,
+    response::IntoResponse,
+};
 use std::{fs, path::PathBuf};
 
 use crate::{
+    AppState,
     auth::AuthUser,
+    db::delete_shared_file,
     util::{get_user_path, log_actions},
 };
 
@@ -34,6 +41,25 @@ pub async fn delete_file(
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to delete file or folder",
+        )
+            .into_response(),
+    }
+}
+
+pub async fn delete_share_link(
+    Path(id): Path<String>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    println!("Deleting share link with ID: {}", id);
+    let db = &state.db;
+
+    let res = delete_shared_file(db, &id).await;
+
+    match res {
+        Ok(_) => (StatusCode::OK, "Share link deleted successfully").into_response(),
+        Err(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to delete share link",
         )
             .into_response(),
     }

@@ -46,8 +46,6 @@ export default function Files() {
         setRenameOpen(true);
     };
 
-
-
     const renameEntry = async () => {
         if (!renameTarget || !renameValue.trim()) return;
 
@@ -302,11 +300,13 @@ export default function Files() {
     const compareBySize = (a: FileEntry, b: FileEntry) => (a.size || 0) - (b.size || 0);
 
     const columns: ColumnsType<FileEntry> = [
+
         {
             title: 'Name',
             dataIndex: 'name',
             key: 'name',
             render: (name: string, record: FileEntry) => (
+         
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {record.is_dir ? (
                         <FcFolder style={{ fontSize: 20 }} />

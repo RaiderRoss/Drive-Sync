@@ -22,8 +22,10 @@ use crate::{
     auth::{auth_middleware, get_auth, register_user},
     db::setup_db,
     routes::{
-        delete::delete_file,
-        get::{download_file, get_shared_file, list_uploaded_files, stream_video},
+        delete::{delete_file, delete_share_link},
+        get::{
+            download_file, get_shared_file, list_shared_files, list_uploaded_files, stream_video,
+        },
         post::{create_path, create_shared_path, rename_path, upload_file, upload_root},
     },
     util::{UPLOAD_DIR, initialize_config},
@@ -51,9 +53,8 @@ async fn main() {
 
     let err = setup_db(&state.db).await;
 
-    if let Err(e) = err {
-
-        return;
+    if let Err(_) = err {
+        
     }
 
     let app = create_router(state);
@@ -80,6 +81,8 @@ pub fn create_router(state: AppState) -> Router {
         .route("/delete/{*path}", delete(delete_file))
         .route("/rename", post(rename_path))
         .route("/share", post(create_shared_path))
+        .route("/shares", get(list_shared_files))
+        .route("/share/{*path}", delete(delete_share_link))
         .layer(middleware::from_fn(auth_middleware));
 
     Router::new()

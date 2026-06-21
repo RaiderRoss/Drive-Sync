@@ -250,8 +250,13 @@ pub async fn rename_path(
 
     let db = &state.db;
 
-    if let Ok(true) = check_shared_file_exists(db, &user_id, &payload.old_path).await {
-        let _ = change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path).await;
+    if let Err(_) =
+        change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path).await
+    {
+        eprintln!(
+            "rename_path: failed to update shared_files for {} -> {}",
+            payload.old_path, payload.new_path
+        );
     }
 
     let mut old_full = PathBuf::from(&upload_root);

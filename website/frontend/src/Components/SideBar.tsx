@@ -4,8 +4,7 @@ import type { DataNode } from 'antd/es/tree';
 import { FcFolder, FcOpenedFolder } from 'react-icons/fc';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useRefresh } from '../contexts/RefreshContext';
-import { FaAngleDown, FaFileAlt, FaSignOutAlt } from 'react-icons/fa';
-import { GiCircle } from 'react-icons/gi';
+import { FaAngleDown, FaFileAlt, FaSignOutAlt, FaLink } from 'react-icons/fa';
 import { HiPlus } from 'react-icons/hi';
 import { getAuthHeaders } from '../api/File';
 
@@ -272,6 +271,13 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
         navigate('/login');
     }
 
+    const goToSharedFiles = () => {
+        navigate('/shares');
+        if (onLinkClick) {
+            onLinkClick();
+        }
+    };
+
     const currentPath = location.pathname.startsWith('/files')
         ? location.pathname.replace(/^\/files\/?/, '')
         : '';
@@ -281,92 +287,127 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
         <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#1c1c1c' }}>
             <div
                 style={{
-                    height: 55,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 20,
-                    fontWeight: 600,
-                    color: '#ffffff',
                     borderBottom: '1px solid #2d2d2d',
                     userSelect: 'none',
                     background: '#1c1c1c',
+                    padding: '14px 12px 10px',
                 }}
             >
-                <Dropdown
-                    trigger={['click']}
-                    placement="bottomLeft"
-                    menu={{
-                        items: [
-                            {
-                                key: 'folder',
-                                icon: <FcFolder size={22} />,
-                                label: <span style={{ fontSize: 16 }}>New Folder</span>,
-                                onClick: onCreateFolder
-                            },
-                            {
-                                key: 'file',
-                                icon: <FaFileAlt style={{ fontSize: 20, color: '#95a5a6' }} />,
-                                label: <span style={{ fontSize: 16 }}>New File</span>,
-                                onClick: onCreateFile
-                            },
-                        ],
-                    }}
-                >
 
-                    <Button
-                        type="text"
-                        size="small"
-                        shape="round"
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+
+                    <Dropdown
+                        trigger={['click']}
+                        placement="bottomLeft"
+                        menu={{
+                            items: [
+                                {
+                                    key: 'folder',
+                                    icon: <FcFolder size={22} />,
+                                    label: <span style={{ fontSize: 16 }}>New Folder</span>,
+                                    onClick: onCreateFolder
+                                },
+                                {
+                                    key: 'file',
+                                    icon: <FaFileAlt style={{ fontSize: 20, color: '#95a5a6' }} />,
+                                    label: <span style={{ fontSize: 16 }}>New File</span>,
+                                    onClick: onCreateFile
+                                },
+                            ],
+                        }}
+                    >
+                        <Button
+                            type="primary"
+                            size="small"
+                            shape="round"
+                            style={{
+                                fontSize: 12,
+                                fontWeight: 600,
+                                height: 28,
+                                padding: '0 12px 0 10px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                flex: 1,
+                                justifyContent: 'center',
+                                border: 'none',
+                            }}
+                        >
+                            <HiPlus size={13} />
+                            New
+                            <FaAngleDown size={8} style={{ opacity: 0.7 }} />
+                        </Button>
+                    </Dropdown>
+
+                    <div
                         style={{
-                            color: '#fff',
-                            fontSize: 14,
-                            height: 32,
-                            padding: '0 12px',
                             display: 'flex',
                             alignItems: 'center',
                             gap: 6,
+                            paddingLeft: 10,
+                            borderLeft: '1px solid #2d2d2d',
                         }}
                     >
-                        <div style={{ position: 'relative', width: 18, height: 18 }}>
-                            <GiCircle size={18} color="#fff" />
-                            <HiPlus size={12} color="rgb(130, 212, 151)" style={{
-                                position: 'absolute',
-                                top: '50%',
-                                left: '50%',
-                                transform: 'translate(-50%, -50%)'
-                            }} />
-                        </div>
-
-                        New
-                        <FaAngleDown size={12} />
-                    </Button>
-
-                </Dropdown>
-
-
-                <Button
-                    type="text"
-                    size="small"
-                    shape="round"
-                    style={{
-                        color: '#fff',
-                        fontSize: 14,
-                        height: 32,
-                        padding: '0 12px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        marginLeft: 10,
-                    }}
-
-                    icon={<FaSignOutAlt color="#e74c3c" />}
-                    onClick={logout}
-                >
-                    Logout
-                </Button>
-
-
+                        <Button
+                            type="text"
+                            size="small"
+                            shape="circle"
+                            title="Shared files"
+                            onClick={goToSharedFiles}
+                            style={{
+                                width: 28,
+                                height: 28,
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(124, 134, 245, 0.12)',
+                            }}
+                        >
+                            <span
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                    height: '100%',
+                                    color: '#8d94f2',
+                                }}
+                            >
+                                <FaLink size={12} />
+                            </span>
+                        </Button>
+                        <Button
+                            type="text"
+                            size="small"
+                            shape="circle"
+                            title="Log out"
+                            onClick={logout}
+                            style={{
+                                width: 28,
+                                height: 28,
+                                padding: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                background: 'rgba(231, 76, 60, 0.12)',
+                            }}
+                        >
+                            <span
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    width: '100%',
+                                    height: '100%',
+                                    color: '#e74c3c',
+                                }}
+                            >
+                                <FaSignOutAlt size={12} />
+                            </span>
+                        </Button>
+                    </div>
+                </div>
             </div>
             <div style={{
                 marginTop: 10,

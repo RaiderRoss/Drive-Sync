@@ -9,6 +9,7 @@ import FileViewer from './pages/FileViewer';
 import Auth from './pages/Auth';
 import { RefreshProvider } from './contexts/RefreshContext';
 import { AlertProvider } from './Components/Alert';
+import SharesViewer from './pages/SharedViewer';
 
 const { Content, Sider } = Layout;
 
@@ -107,6 +108,7 @@ export default function InnerApp() {
                 <Route path="/login" element={<Auth />} />
                 <Route path="/register" element={<Auth />} />
                 <Route path="/share/*" element={<FileViewer />} />
+                <Route path="/shares" element={<SharesViewer />} />
               </Routes>
 
             </Content>

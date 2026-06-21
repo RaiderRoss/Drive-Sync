@@ -1,6 +1,6 @@
 use crate::AppState;
 use crate::auth::AuthUser;
-use crate::db::get_shared_file_by_id;
+use crate::db::{get_shared_file_by_id, get_shares};
 use crate::util::{clean_path, get_user_path};
 use axum::Extension;
 use axum::extract::State;
@@ -86,6 +86,38 @@ pub async fn list_uploaded_files(
     Ok(Json(entries))
 }
 
+#[derive(Serialize)]
+pub struct ShareEntryResponse {
+    id: String,
+    file_path: String,
+    created_at: i64,
+}
+
+pub async fn list_shared_files(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    State(state): State<AppState>,
+) -> Result<Json<Vec<ShareEntryResponse>>, StatusCode> {
+    let shares = get_shares(&state.db, &claims.user).await.map_err(|e| {
+        eprintln!("list_shared_files: db error: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+ 
+    if shares.is_empty() {
+        eprintln!("list_shared_files: no records found for user {}", claims.user);
+    }
+ 
+    Ok(Json(
+        shares
+            .into_iter()
+            .map(|s| ShareEntryResponse {
+                id: s.0,
+                file_path: s.1,
+                created_at: s.2,
+            })
+            .collect(),
+    ))
+}
+
 pub async fn get_shared_file(
     Path(id): Path<String>,
     State(state): State<AppState>,
@@ -116,7 +148,9 @@ pub async fn get_shared_file(
     let ext = file_path.rsplit('.').next().unwrap_or("").to_lowercase();
 
     if matches!(ext.as_str(), "mp4" | "webm" | "mkv" | "avi") {
-        return serve_video(path, headers, &ext).await.map(|r| r.into_response());
+        return serve_video(path, headers, &ext)
+            .await
+            .map(|r| r.into_response());
     }
 
     serve_file(path, file_path).await.map(|r| r.into_response())
@@ -192,10 +226,7 @@ pub async fn serve_file(path: PathBuf, filename: String) -> Result<Response<Body
                 );
             }
 
-            headers.insert(
-                "Content-Type",
-                HeaderValue::from_str(content_type).unwrap(),
-            );
+            headers.insert("Content-Type", HeaderValue::from_str(content_type).unwrap());
 
             let response = (headers, body).into_response();
             Ok(response)

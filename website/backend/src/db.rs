@@ -65,6 +65,38 @@ pub async fn check_shared_file_exists(db: &SqlitePool, owner_id: &str, file_path
     Ok(count > 0)
 }
 
+pub async fn delete_shared_file(db: &SqlitePool, id: &str) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM shared_files WHERE id = ?")
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_shares(
+    db: &SqlitePool,
+    owner_id: &str,
+) -> Result<Vec<(String, String, i64)>, sqlx::Error> {
+    let rows = sqlx::query("SELECT id, file_path, created_at FROM shared_files WHERE owner_id = ?")
+        .bind(owner_id)
+        .fetch_all(db)
+        .await?;
+ 
+    let shares = rows
+        .into_iter()
+        .map(|row| {
+            let id: String = row.get(0);
+            let file_path: String = row.get(1);
+            let created_at: i64 = row.get(2);
+            Ok((id, file_path, created_at))
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
+ 
+    Ok(shares)
+}
+ 
+ 
+
 pub async fn get_shared_file_by_id(
     db: &SqlitePool,
     id: &str,
@@ -84,15 +116,27 @@ pub async fn change_shared_file_path(
     file_path: &str,
     new_file_path: &str,
 ) -> Result<(), sqlx::Error> {
-    sqlx::query("UPDATE shared_files SET file_path = ? WHERE owner_id = ? AND file_path = ?")
-        .bind(new_file_path)
-        .bind(owner_id)
-        .bind(file_path)
-        .execute(db)
-        .await?;
+    let prefix = format!("{file_path}/");
+ 
+    sqlx::query(
+        "UPDATE shared_files
+         SET file_path = CASE
+             WHEN file_path = ?1 THEN ?2
+             ELSE ?2 || '/' || substr(file_path, length(?3) + 1)
+         END
+         WHERE owner_id = ?4
+           AND (file_path = ?1 OR substr(file_path, 1, length(?3)) = ?3)",
+    )
+    .bind(file_path)
+    .bind(new_file_path)
+    .bind(&prefix)
+    .bind(owner_id)
+    .execute(db)
+    .await?;
+ 
     Ok(())
 }
-
+ 
 pub async fn get_user_by_username(
     db: &SqlitePool,
     username: &str,
