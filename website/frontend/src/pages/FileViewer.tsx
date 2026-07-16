@@ -5,6 +5,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { getAuthHeaders } from '../api/File';
 import { useAlert } from '../Components/Alert';
+import { FcOpenedFolder } from 'react-icons/fc';
 
 const { TextArea } = Input;
 
@@ -29,6 +30,12 @@ const extensionToLanguage: Record<string, string> = {
     php: 'php',
     default: 'text',
 };
+
+interface ArchiveEntry {
+    path: string;
+    size: number;
+    is_dir: boolean;
+}
 
 export default function FileViewer() {
     const location = useLocation();
@@ -58,9 +65,19 @@ export default function FileViewer() {
     const [error, setError] = useState<string | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+    const [archiveEntries, setArchiveEntries] = useState<ArchiveEntry[]>([]);
+
+    const [archiveError, setArchiveError] = useState<string | null>(null);
 
     const getMediaMimeType = (ext?: string) => {
         switch (ext) {
+            case 'zip':
+                return 'application/zip';
+            case 'tar':
+                return 'application/x-tar';
+            case 'gz':
+            case 'tgz':
+                return 'application/gzip';
             case 'pdf':
                 return 'application/pdf';
             case 'jpg':
@@ -109,10 +126,12 @@ export default function FileViewer() {
         setError(null);
         setContent(null);
         setPreviewSrc(null);
+        setArchiveEntries([]);
+        setArchiveError(null);
 
         const urlExt = filename.includes('.') ? filename.split('.').pop()!.toLowerCase() : '';
 
-        const classify = (contentType: string, disposition: string | null): 'image' | 'video' | 'audio' | 'pdf' | 'text' => {
+        const classify = (contentType: string, disposition: string | null): 'image' | 'video' | 'audio' | 'pdf' | 'archive' | 'text' => {
             const type = contentType.toLowerCase();
 
             // Prefer the real filename from Content-Disposition if the server sent one
@@ -129,9 +148,14 @@ export default function FileViewer() {
             if (type.startsWith('video/')) return 'video';
             if (type.startsWith('audio/')) return 'audio';
             if (type.includes('pdf')) return 'pdf';
+            if (type.includes('zip') || type.includes('x-tar') || type.includes('gzip')) return 'archive';
 
             // Content-Type was generic (e.g. application/octet-stream) — fall
             // back to whatever extension we have.
+            if (realExt === 'zip') return 'archive';
+            if (realExt === 'tar' || realExt === 'tgz' || realExt === 'gz') return 'archive';
+            if (filename.toLowerCase().endsWith('.tar.gz')) return 'archive';
+            if (filename.toLowerCase().endsWith('.gz')) return 'archive';
             if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'].includes(realExt)) return 'image';
             if (['mp4', 'webm', 'mkv', 'avi'].includes(realExt)) return 'video';
             if (['mp3', 'wav', 'ogg'].includes(realExt)) return 'audio';
@@ -149,6 +173,14 @@ export default function FileViewer() {
                 const contentType = res.headers.get('Content-Type') || '';
                 const disposition = res.headers.get('Content-Disposition');
                 const kind = classify(contentType, disposition);
+
+                let realFilename = filename;
+                if (disposition) {
+                    const match = disposition.match(/filename="?([^"]+)"?/i);
+                    if (match?.[1]) {
+                        realFilename = match[1];
+                    }
+                }
 
                 if (kind === 'text') {
                     const text = await res.text();
@@ -173,6 +205,27 @@ export default function FileViewer() {
                     setFileType(kind);
                     setHighlightLang('text');
                     setPreviewSrc(objectUrl);
+
+                    if (kind === 'archive') {
+                        setArchiveError(null);
+                        setArchiveEntries([]);
+
+                        const archiveUrl = `${API_BASE}/archive/${encodeURIComponent(realFilename)}`;
+
+                        fetch(archiveUrl, {
+                            headers: getAuthHeaders(),
+                        })
+                            .then(async archiveRes => {
+                                if (!archiveRes.ok) throw new Error(`HTTP ${archiveRes.status}`);
+                                const entries: ArchiveEntry[] = await archiveRes.json();
+                                if (!cancelled) setArchiveEntries(entries);
+                            })
+                            .catch(archiveErr => {
+                                if (cancelled) return;
+                                console.error('Archive listing error:', archiveErr);
+                                setArchiveError('Could not load archive contents.');
+                            })
+                    }
                 }
             })
             .catch(err => {
@@ -232,6 +285,14 @@ export default function FileViewer() {
     };
 
     const pathParts = filename.split('/');
+    const downloadPreview = () => {
+        if (!previewSrc) return;
+
+        const link = document.createElement('a');
+        link.href = previewSrc;
+        link.download = filename;
+        link.click();
+    };
     const breadcrumbItems = [
         {
             title: (
@@ -433,6 +494,156 @@ export default function FileViewer() {
                         >
                             Your browser does not support the audio element.
                         </audio>
+                    </div>
+                )}
+
+                {fileType === 'archive' && previewSrc && (
+                    <div
+                        style={{
+                            width: '100%',
+                            maxWidth: '1000px',
+                            background: '#1f1f1f',
+                            border: '1px solid #3a3a3a',
+                            borderRadius: 14,
+                            overflow: 'hidden',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.35)',
+                        }}
+                    >
+                        <div
+                            style={{
+                                padding: '20px 24px',
+                                borderBottom: '1px solid #333',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                gap: 16,
+                                background: 'linear-gradient(180deg, #2a2a2a 0%, #242424 100%)',
+                            }}
+                        >
+                            <div>
+                                <div
+                                    style={{
+                                        color: '#fff',
+                                        fontSize: 22,
+                                        fontWeight: 700,
+                                        marginBottom: 4,
+                                    }}
+                                >
+                                    Archive Contents
+                                </div>
+
+                                <div
+                                    style={{
+                                        color: '#9d9d9d',
+                                        fontSize: 13,
+                                    }}
+                                >
+                                    {archiveEntries.length} file{archiveEntries.length !== 1 ? 's' : ''}
+                                </div>
+                            </div>
+
+                            <Button type="primary" onClick={downloadPreview}>
+                                Download Archive
+                            </Button>
+                        </div>
+
+                        <div style={{ padding: 20 }}>
+                            {archiveError ? (
+                                <AntdAlert
+                                    message="Archive"
+                                    description={archiveError}
+                                    type="warning"
+                                    showIcon
+                                />
+                            ) : (
+                                <div
+                                    style={{
+                                        display: 'grid',
+                                        gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+                                        gap: 16,
+                                        maxHeight: 550,
+                                        overflowY: 'auto',
+                                    }}
+                                >
+                                    {archiveEntries.map((entry, index) => (
+                                        <div
+                                            key={`${entry.path}-${index}`}
+                                            style={{
+                                                background: '#2b2b2b',
+                                                border: '1px solid #3b3b3b',
+                                                borderRadius: 10,
+                                                padding: 14,
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 12,
+                                                cursor: 'pointer',
+                                                transition: 'all .15s ease',
+                                            }}
+
+                                            onMouseLeave={(e) => {
+                                                e.currentTarget.style.background = '#2b2b2b';
+                                                e.currentTarget.style.borderColor = '#3b3b3b';
+                                            }}
+                                        >
+                                            <FcOpenedFolder
+                                                style={{
+                                                    fontSize: 36,
+                                                    color: '#4096ff',
+                                                    flexShrink: 0,
+                                                }}
+                                            />
+
+                                            <div
+                                                style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    overflow: 'hidden',
+                                                    flex: 1,
+                                                }}
+                                            >
+                                                <div
+                                                    style={{
+                                                        color: '#fff',
+                                                        fontWeight: 600,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                    }}
+                                                >
+                                                    {entry.path.split('/').pop()}
+                                                </div>
+
+                                                <div
+                                                    style={{
+                                                        color: '#8c8c8c',
+                                                        fontSize: 12,
+                                                        whiteSpace: 'nowrap',
+                                                        overflow: 'hidden',
+                                                        textOverflow: 'ellipsis',
+                                                        marginTop: 2,
+                                                    }}
+                                                >
+                                                    {entry.path}
+                                                </div>
+
+                                                {'size' in entry && (
+                                                    <div
+                                                        style={{
+                                                            color: '#b0b0b0',
+                                                            fontSize: 12,
+                                                            marginTop: 8,
+                                                        }}
+                                                    >
+                                                        {(Number(entry.size) / 1024).toFixed(1)} KB
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 

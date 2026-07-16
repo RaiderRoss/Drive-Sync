@@ -21,3 +21,6 @@ chrono = "0.4.44"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite"] }
 argon2 = "0.5.3"
 rand = "0.8"
+flate2 = "1.1.5"
+tar = "0.4.44"
+zip = "2.1.6"

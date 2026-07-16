@@ -12,15 +12,20 @@ use axum::{
     response::IntoResponse,
 };
 use bytes::Bytes;
+use flate2::read::GzDecoder;
 use futures::StreamExt;
+use std::io::Read;
 use rayon::prelude::*;
 use serde::Serialize;
 use std::{collections::HashMap, fs, io, path::PathBuf, time::UNIX_EPOCH};
+use tar::Archive as TarArchive;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt},
+    task,
 };
 use tokio_util::{bytes, io::ReaderStream};
+use zip::ZipArchive;
 
 #[derive(Serialize)]
 pub struct FileEntry {
@@ -93,6 +98,169 @@ pub struct ShareEntryResponse {
     created_at: i64,
 }
 
+#[derive(Serialize)]
+pub struct ArchiveEntryResponse {
+    path: String,
+    size: u64,
+    is_dir: bool,
+}
+
+fn archive_extension(filename: &str) -> String {
+    let lower = filename.to_lowercase();
+    if lower.ends_with(".tar.gz") {
+        return "tar.gz".to_string();
+    }
+
+    if lower.ends_with(".tgz") {
+        return "tgz".to_string();
+    }
+
+    filename.rsplit('.').next().unwrap_or("").to_lowercase()
+}
+
+fn keep_entry(path: &str) -> bool {
+    let path = path.trim_end_matches('/');
+    let depth = path.split('/').filter(|s| !s.is_empty()).count();
+    depth <= 2
+}
+
+fn read_archive_entries(
+    path: &PathBuf,
+    filename: &str,
+) -> Result<Vec<ArchiveEntryResponse>, StatusCode> {
+    match archive_extension(filename).as_str() {
+        "zip" => {
+            let file = fs::File::open(path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let mut archive = ZipArchive::new(file).map_err(|_| StatusCode::BAD_REQUEST)?;
+            let mut entries = Vec::with_capacity(archive.len());
+
+            for index in 0..archive.len() {
+                let file = archive
+                    .by_index(index)
+                    .map_err(|_| StatusCode::BAD_REQUEST)?;
+                let path = file.name();
+                if !keep_entry(&path) {
+                    continue;
+                }
+                entries.push(ArchiveEntryResponse {
+                    path: file.name().to_string(),
+                    size: file.size(),
+                    is_dir: file.is_dir(),
+                });
+            }
+
+            Ok(entries)
+        }
+        "tar" => {
+            let file = fs::File::open(path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let mut archive = TarArchive::new(file);
+            let mut entries = Vec::new();
+
+            for entry in archive.entries().map_err(|_| StatusCode::BAD_REQUEST)? {
+                let entry = entry.map_err(|_| StatusCode::BAD_REQUEST)?;
+                let path = entry
+                    .path()
+                    .map_err(|_| StatusCode::BAD_REQUEST)?
+                    .to_string_lossy()
+                    .to_string();
+
+                if !keep_entry(&path) {
+                    continue;
+                }
+                entries.push(ArchiveEntryResponse {
+                    path,
+                    size: entry.size(),
+                    is_dir: entry.header().entry_type().is_dir(),
+                });
+            }
+
+            Ok(entries)
+        }
+        "tar.gz" | "tgz" => {
+            let file = fs::File::open(path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let decoder = GzDecoder::new(file);
+            let mut archive = TarArchive::new(decoder);
+            let mut entries = Vec::new();
+
+            for entry in archive.entries().map_err(|_| StatusCode::BAD_REQUEST)? {
+                let entry = entry.map_err(|_| StatusCode::BAD_REQUEST)?;
+                let path = entry
+                    .path()
+                    .map_err(|_| StatusCode::BAD_REQUEST)?
+                    .to_string_lossy()
+                    .to_string();
+
+                if !keep_entry(&path) {
+                    continue;
+                }
+
+                entries.push(ArchiveEntryResponse {
+                    path,
+                    size: entry.size(),
+                    is_dir: entry.header().entry_type().is_dir(),
+                });
+            }
+
+            Ok(entries)
+        }
+        "gz" => {
+            let file = fs::File::open(path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+            let mut decoder = GzDecoder::new(file);
+            let mut size = 0u64;
+            let mut buffer = [0u8; 8192];
+
+            loop {
+                let read = decoder
+                    .read(&mut buffer)
+                    .map_err(|_| StatusCode::BAD_REQUEST)?;
+
+                if read == 0 {
+                    break;
+                }
+
+                size += read as u64;
+            }
+
+            let inner_name = filename
+                .strip_suffix(".gz")
+                .unwrap_or(filename)
+                .to_string();
+
+            Ok(vec![ArchiveEntryResponse {
+                path: inner_name,
+                size,
+                is_dir: false,
+            }])
+        }
+        _ => Err(StatusCode::BAD_REQUEST),
+    }
+}
+
+async fn archive_entries_for_path(
+    path: PathBuf,
+    filename: String,
+) -> Result<Json<Vec<ArchiveEntryResponse>>, StatusCode> {
+    let entries = task::spawn_blocking(move || read_archive_entries(&path, &filename))
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)??;
+
+    Ok(Json(entries))
+}
+
+pub async fn list_archive_entries(
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Path(filename): Path<String>,
+) -> Result<Json<Vec<ArchiveEntryResponse>>, StatusCode> {
+    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
+    path.push(&filename);
+
+    if !path.exists() || !path.is_file() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+
+    archive_entries_for_path(path, filename).await
+}
+
 pub async fn list_shared_files(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     State(state): State<AppState>,
@@ -101,11 +269,14 @@ pub async fn list_shared_files(
         eprintln!("list_shared_files: db error: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
- 
+
     if shares.is_empty() {
-        eprintln!("list_shared_files: no records found for user {}", claims.user);
+        eprintln!(
+            "list_shared_files: no records found for user {}",
+            claims.user
+        );
     }
- 
+
     Ok(Json(
         shares
             .into_iter()

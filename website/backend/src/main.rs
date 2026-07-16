@@ -24,7 +24,8 @@ use crate::{
     routes::{
         delete::{delete_file, delete_share_link},
         get::{
-            download_file, get_shared_file, list_shared_files, list_uploaded_files, stream_video,
+            download_file, get_shared_file, list_archive_entries, list_shared_files,
+            list_uploaded_files, stream_video,
         },
         post::{create_path, create_shared_path, rename_path, upload_file, upload_root},
     },
@@ -76,6 +77,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/uploads/{*path}", get(list_uploaded_files))
         .route("/uploads", get(list_uploaded_files))
         .route("/download/{*path}", get(download_file))
+        .route("/archive/{*path}", get(list_archive_entries))
         .route("/stream/{*path}", get(stream_video))
         .route("/create_path/{*path}", post(create_path))
         .route("/delete/{*path}", delete(delete_file))

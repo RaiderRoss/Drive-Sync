@@ -81,6 +81,7 @@ export default function Files() {
         setLoading(true);
         try {
             const data = await FileAPI.fetchFiles(directory || undefined);
+            console.log('Fetched files:', data);
             setFiles(data);
         } catch (err) {
             console.error('Failed to fetch or parse JSON:', err);
