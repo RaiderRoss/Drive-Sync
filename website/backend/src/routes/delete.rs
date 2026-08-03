@@ -4,13 +4,10 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use std::{fs, path::PathBuf};
+use std::{fs};
 
 use crate::{
-    AppState,
-    auth::AuthUser,
-    db::delete_shared_file,
-    util::{get_user_path, log_actions},
+    AppState, routes::{auth::AuthUser, db::delete_shared_file}, util::{get_user_path, log_actions},
 };
 
 pub async fn delete_file(
@@ -18,7 +15,7 @@ pub async fn delete_file(
     Path(target_path): Path<String>,
 ) -> impl IntoResponse {
     let user_id = claims.user.clone();
-    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
+    let mut path = get_user_path(claims.user);
     path.push(&target_path);
 
     if !path.exists() {

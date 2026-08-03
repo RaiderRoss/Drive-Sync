@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Table, Typography, Spin, Button, Breadcrumb, Dropdown, Modal, Input, Upload as AntUpload, Popover, Space } from 'antd';
-import { DownloadOutlined, DeleteOutlined, FileFilled, FolderAddOutlined, UploadOutlined, SendOutlined, LinkOutlined, UserOutlined, EditOutlined } from '@ant-design/icons';
+import { DownloadOutlined, DeleteOutlined, FileFilled, FolderAddOutlined, UploadOutlined, SendOutlined, LinkOutlined, UserOutlined, EditOutlined, InboxOutlined } from '@ant-design/icons';
 import { FcFolder } from 'react-icons/fc';
 import { FaFilePdf, FaFileAudio, FaFileImage, FaFileVideo, FaFileArchive, FaFileCode, FaFileWord, FaFileExcel, FaFilePowerpoint, FaFileAlt } from 'react-icons/fa';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -85,6 +85,18 @@ export default function Files() {
             setFiles(data);
         } catch (err) {
             console.error('Failed to fetch or parse JSON:', err);
+
+            if (err instanceof Error) {
+                switch (err.message) {
+                    case 'Empty root directory':
+                        return;
+
+                    case 'No files found in the specified directory':
+                        navigate('/files');
+                        return;
+                }
+            }
+
             alert.error('Could not load files.');
         } finally {
             setLoading(false);
@@ -307,7 +319,7 @@ export default function Files() {
             dataIndex: 'name',
             key: 'name',
             render: (name: string, record: FileEntry) => (
-         
+
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     {record.is_dir ? (
                         <FcFolder style={{ fontSize: 20 }} />
@@ -459,12 +471,7 @@ export default function Files() {
                                 e.stopPropagation();
                                 deleteFile(fullPath);
                             }}
-                            style={{ color: '#ff4d4f' }}
                         />
-
-
-
-
                     </div >
                 );
             },
@@ -511,7 +518,64 @@ export default function Files() {
                     columns={columns}
                     dataSource={files.map(file => ({ ...file, key: file.name }))}
                     pagination={false}
-                    locale={{ emptyText: ' ' }}
+                    locale={{
+                        emptyText: (
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    padding: '80px 20px',
+                                    color: '#a0a0a0',
+                                }}
+                            >
+                                <InboxOutlined
+                                    style={{
+                                        fontSize: 64,
+                                        color: '#4b5563',
+                                        marginBottom: 20,
+                                    }}
+                                />
+
+                                <div
+                                    style={{
+                                        fontSize: 24,
+                                        fontWeight: 600,
+                                        color: '#ffffff',
+                                        marginBottom: 8,
+                                    }}
+                                >
+                                    Your storage is empty
+                                </div>
+
+                                <div
+                                    style={{
+                                        maxWidth: 450,
+                                        textAlign: 'center',
+                                        lineHeight: 1.6,
+                                        marginBottom: 24,
+                                        color: '#9ca3af',
+                                    }}
+                                >
+                                    Upload files or create folders to get started.
+                                    You can drag and drop files into this page,
+                                    use the upload area above, or right-click anywhere
+                                    to open the context menu.
+                                </div>
+
+                                <AntUpload {...uploadProps} showUploadList={false}>
+                                    <Button
+                                        type="primary"
+                                        size="large"
+                                        icon={<UploadOutlined />}
+                                    >
+                                        Upload Files
+                                    </Button>
+                                </AntUpload>
+                            </div>
+                        ),
+                    }}
                     onRow={(record) => ({
                         onClick: () => {
                             if (record.is_dir) {

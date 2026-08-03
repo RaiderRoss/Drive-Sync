@@ -53,6 +53,15 @@ export async function fetchFiles(directory?: string) {
 
 	if (!res.ok) {
 		const text = await res.text();
+
+		if (res.status === 404) {
+			throw new Error('No files found in the specified directory');
+		}
+
+		if (res.status === 400) {
+			throw new Error('Empty root directory');
+		}
+
 		throw new Error(text || 'Failed to fetch files');
 	}
 

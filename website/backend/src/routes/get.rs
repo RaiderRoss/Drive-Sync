@@ -1,6 +1,6 @@
 use crate::AppState;
-use crate::auth::AuthUser;
-use crate::db::{get_shared_file_by_id, get_shares};
+use crate::routes::auth::AuthUser;
+use crate::routes::db::{get_shared_file_by_id, get_shares};
 use crate::util::{clean_path, get_user_path};
 use axum::Extension;
 use axum::extract::State;
@@ -11,20 +11,20 @@ use axum::{
     http::{HeaderMap, HeaderValue, Response, StatusCode, header},
     response::IntoResponse,
 };
-use bytes::Bytes;
+
 use flate2::read::GzDecoder;
 use futures::StreamExt;
-use std::io::Read;
 use rayon::prelude::*;
 use serde::Serialize;
-use std::{collections::HashMap, fs, io, path::PathBuf, time::UNIX_EPOCH};
+use std::io::Read;
+use std::{fs, io, path::PathBuf, time::UNIX_EPOCH};
 use tar::Archive as TarArchive;
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncSeekExt},
     task,
 };
-use tokio_util::{bytes, io::ReaderStream};
+use tokio_util::{io::ReaderStream};
 use zip::ZipArchive;
 
 #[derive(Serialize)]
@@ -41,12 +41,17 @@ pub async fn list_uploaded_files(
     path: Option<Path<String>>,
 ) -> Result<Json<Vec<FileEntry>>, StatusCode> {
     let target_dir = match path {
-        Some(Path(p)) => clean_path(p, claims.user, claims.admin).ok_or(StatusCode::NOT_FOUND)?,
-        None => PathBuf::from(get_user_path(claims.user, claims.admin)),
+        Some(Path(p)) => clean_path(p, claims.user.clone()).ok_or(StatusCode::BAD_REQUEST)?,
+        None => get_user_path(claims.user.clone()),
     };
 
+    let user_root = get_user_path(claims.user.clone());
+
     if !target_dir.exists() || !target_dir.is_dir() {
-        return Err(StatusCode::NOT_FOUND);
+        return Err(match target_dir == user_root {
+            true => StatusCode::BAD_REQUEST,
+            false => StatusCode::NOT_FOUND,
+        });
     }
 
     let mut entries = vec![];
@@ -67,7 +72,7 @@ pub async fn list_uploaded_files(
 
         entries.push(FileEntry {
             name: entry.file_name().to_string_lossy().to_string(),
-            size: metadata.is_file().then(|| metadata.len()).unwrap_or(0),
+            size: metadata.is_file().then_some(metadata.len()).unwrap_or(0),
             date_modified: metadata
                 .modified()
                 .ok()
@@ -139,7 +144,7 @@ fn read_archive_entries(
                     .by_index(index)
                     .map_err(|_| StatusCode::BAD_REQUEST)?;
                 let path = file.name();
-                if !keep_entry(&path) {
+                if !keep_entry(path) {
                     continue;
                 }
                 entries.push(ArchiveEntryResponse {
@@ -221,10 +226,7 @@ fn read_archive_entries(
                 size += read as u64;
             }
 
-            let inner_name = filename
-                .strip_suffix(".gz")
-                .unwrap_or(filename)
-                .to_string();
+            let inner_name = filename.strip_suffix(".gz").unwrap_or(filename).to_string();
 
             Ok(vec![ArchiveEntryResponse {
                 path: inner_name,
@@ -251,7 +253,7 @@ pub async fn list_archive_entries(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Path(filename): Path<String>,
 ) -> Result<Json<Vec<ArchiveEntryResponse>>, StatusCode> {
-    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
+    let mut path = get_user_path(claims.user);
     path.push(&filename);
 
     if !path.exists() || !path.is_file() {
@@ -310,7 +312,7 @@ pub async fn get_shared_file(
 
     let (owner_id, file_path) = filename.unwrap();
 
-    let path = PathBuf::from(get_user_path(owner_id, false)).join(&file_path);
+    let path = get_user_path(owner_id).join(&file_path);
 
     if !path.exists() || !path.is_file() {
         return Ok((StatusCode::NOT_FOUND, "File not found").into_response());
@@ -331,7 +333,7 @@ pub async fn download_file(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Path(filename): Path<String>,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
+    let mut path = get_user_path(claims.user);
 
     path.push(&filename);
 
@@ -411,7 +413,7 @@ pub async fn stream_video(
     Path(filename): Path<String>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, StatusCode> {
-    let mut path = PathBuf::from(get_user_path(claims.user, claims.admin));
+    let mut path = get_user_path(claims.user);
     path.push(&filename);
 
     if !path.exists() || !path.is_file() {
@@ -463,7 +465,7 @@ pub async fn serve_video(
     };
 
     let parts: Vec<&str> = range_header[6..].split('-').collect();
-    let start: u64 = parts.get(0).and_then(|v| v.parse().ok()).unwrap_or(0);
+    let start: u64 = parts.first().and_then(|v| v.parse().ok()).unwrap_or(0);
     let end: u64 = parts
         .get(1)
         .and_then(|v| v.parse().ok())
@@ -483,10 +485,8 @@ pub async fn serve_video(
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let stream = ReaderStream::with_capacity(file.take(chunk_size), 16 * 1024).map(|r| {
-        r.map(Bytes::from)
-            .map_err(|_| std::io::Error::from(std::io::ErrorKind::Other))
-    });
+    let stream = ReaderStream::with_capacity(file.take(chunk_size), 16 * 1024)
+        .map(|r| r.map_err(|_| std::io::Error::from(std::io::ErrorKind::Other)));
 
     let content_range = format!("bytes {}-{}/{}", start, end, file_size);
 
@@ -500,22 +500,6 @@ pub async fn serve_video(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(response)
-}
-
-#[derive(Serialize)]
-pub struct StatsResponse {
-    storage_used_gb: f64,
-    storage_total_gb: u64,
-    files_uploaded: u64,
-    shared_files: u64,
-    folders: u64,
-    active_devices: u64,
-    subscription_plan: String,
-    account_created: String,
-    monthly_uploads: u64,
-    monthly_downloads: u64,
-    notifications: u64,
-    files_by_type: HashMap<String, u64>,
 }
 
 pub fn get_directory_size<P: AsRef<std::path::Path>>(path: P) -> io::Result<u64> {
@@ -540,12 +524,11 @@ pub fn get_directory_size<P: AsRef<std::path::Path>>(path: P) -> io::Result<u64>
             } else if meta.is_dir() {
                 #[cfg(windows)]
                 {
-                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                        if name.eq_ignore_ascii_case("$RECYCLE.BIN")
-                            || name.eq_ignore_ascii_case("System Volume Information")
-                        {
-                            return 0;
-                        }
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str())
+                        && (name.eq_ignore_ascii_case("$RECYCLE.BIN")
+                            || name.eq_ignore_ascii_case("System Volume Information"))
+                    {
+                        return 0;
                     }
                 }
                 get_directory_size(path).unwrap_or(0)

@@ -10,15 +10,18 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+
 use serde::Deserialize;
 use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
     AppState,
-    auth::{AuthUser, Data},
-    db::{change_shared_file_path, check_shared_file_exists, create_shared_file},
-    routes::get::get_directory_size,
+    routes::{
+        auth::{AuthUser, Data},
+        db::{change_shared_file_path, check_shared_file_exists, create_shared_file},
+        get::get_directory_size,
+    },
     util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
 };
 
@@ -84,8 +87,8 @@ pub async fn create_file(
     user: Data,
 ) -> impl IntoResponse {
     let user_id = user.user.clone();
-    let upload_root = PathBuf::from(get_user_path(user_id.clone(), user.admin));
-    if let Err(_) = fs::create_dir_all(&upload_root) {
+    let upload_root = get_user_path(user_id.clone());
+    if fs::create_dir_all(&upload_root).is_err() {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to prepare upload root",
@@ -93,18 +96,17 @@ pub async fn create_file(
             .into_response();
     }
 
-    let file_path = PathBuf::from(relative_path);
+    let file_path = relative_path;
     let full_path = upload_root.join(&file_path);
 
-    if let Some(parent) = full_path.parent() {
-        if let Err(_) = fs::create_dir_all(parent) {
+    if let Some(parent) = full_path.parent()
+        && let Err(_) = fs::create_dir_all(parent) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to create upload directory",
             )
                 .into_response();
         }
-    }
 
     let mut used_bytes = match get_directory_size(upload_root.clone()) {
         Ok(size) => size,
@@ -151,7 +153,7 @@ pub async fn create_file(
                     .into_response();
             }
 
-            if let Err(_) = file.write_all(&chunk) {
+            if file.write_all(&chunk).is_err() {
                 return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file").into_response();
             }
 
@@ -185,8 +187,8 @@ pub async fn create_path(
 
     let user_id = claims.user.clone();
 
-    let upload_root = get_user_path(claims.user, claims.admin);
-    let mut path_buf = PathBuf::from(upload_root);
+    let upload_root = get_user_path(claims.user);
+    let mut path_buf = upload_root;
     path_buf.push(full_path.trim_start_matches('/'));
 
     if full_path.ends_with('/') {
@@ -224,7 +226,7 @@ pub async fn rename_path(
 ) -> impl IntoResponse {
     let user_id = claims.user.clone();
 
-    let upload_root = get_user_path(claims.user, claims.admin);
+    let upload_root = get_user_path(claims.user);
 
     if payload.old_path.trim().is_empty() || payload.new_path.trim().is_empty() {
         return (
@@ -250,8 +252,7 @@ pub async fn rename_path(
 
     let db = &state.db;
 
-    if let Err(_) =
-        change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path).await
+    if change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path).await.is_err()
     {
         eprintln!(
             "rename_path: failed to update shared_files for {} -> {}",
@@ -263,29 +264,28 @@ pub async fn rename_path(
     old_full.push(
         payload
             .old_path
-            .trim_start_matches(|c| c == '/' || c == '\\'),
+            .trim_start_matches(['/', '\\']),
     );
 
     let mut new_full = PathBuf::from(&upload_root);
     new_full.push(
         payload
             .new_path
-            .trim_start_matches(|c| c == '/' || c == '\\'),
+            .trim_start_matches(['/', '\\']),
     );
 
     if !old_full.exists() {
         return (StatusCode::NOT_FOUND, "Source path does not exist").into_response();
     }
 
-    if let Some(parent) = new_full.parent() {
-        if let Err(_) = fs::create_dir_all(parent) {
+    if let Some(parent) = new_full.parent()
+        && let Err(_) = fs::create_dir_all(parent) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to prepare destination",
             )
                 .into_response();
         }
-    }
 
     match fs::rename(&old_full, &new_full) {
         Ok(_) => {

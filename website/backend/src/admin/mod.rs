@@ -1,5 +1,3 @@
 pub mod get;
 pub mod delete;
-pub mod post;
-pub mod auth;
 mod db;

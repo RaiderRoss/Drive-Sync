@@ -7,6 +7,8 @@ import { useRefresh } from '../contexts/RefreshContext';
 import { FaAngleDown, FaFileAlt, FaSignOutAlt, FaLink } from 'react-icons/fa';
 import { HiPlus } from 'react-icons/hi';
 import { getAuthHeaders } from '../api/File';
+import { SafetyOutlined } from '@ant-design/icons';
+import { useAuth } from '../contexts/AuthContext';
 
 interface FileEntry {
     name: string;
@@ -21,6 +23,7 @@ interface SidebarProps {
 const Sidebar = ({ onLinkClick }: SidebarProps) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const { isAdmin } = useAuth();
     const { refreshTrigger, triggerRefresh } = useRefresh();
     const [treeData, setTreeData] = useState<DataNode[]>([]);
     const [expandedKeys, setExpandedKeys] = useState<string[]>(['root']);
@@ -278,6 +281,13 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
         }
     };
 
+    const goToAdmin = () => {
+        navigate('/admin');
+        if (onLinkClick) {
+            onLinkClick();
+        }
+    };
+
     const currentPath = location.pathname.startsWith('/files')
         ? location.pathname.replace(/^\/files\/?/, '')
         : '';
@@ -293,7 +303,23 @@ const Sidebar = ({ onLinkClick }: SidebarProps) => {
                     padding: '14px 12px 10px',
                 }}
             >
-
+                {isAdmin && (
+                    <Button
+                        type="text"
+                        title="Admin console"
+                        onClick={goToAdmin}
+                        style={{
+                            marginBottom: 10,
+                            padding: 10,
+                            border: '1px solid #2d2d2d',
+                            color: '#f7d774',
+                            background: location.pathname === '/admin' ? '#2a2a2a' : 'transparent',
+                        }}
+                        icon={<SafetyOutlined style={{ fontSize: 10 }} />}
+                    >
+                        Go to Admin Dashboard
+                    </Button>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
 
                     <Dropdown

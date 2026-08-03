@@ -1,6 +1,6 @@
 use crate::{
     AppState,
-    db::{create_user, get_user_by_username},
+    routes::db::{create_user, get_user_by_username},
     util::{self, log_actions},
 };
 use argon2::{
@@ -57,8 +57,12 @@ pub async fn register_user(
     }
     let user = user.unwrap();
     let token = generate_jwt(user.clone(), false);
-    log_actions(format!("{}:{}", username.to_string(), user), "register".to_string(), "".to_string());
-    return (StatusCode::OK, Json(json!({ "token": token }))).into_response();
+    log_actions(
+        format!("{}:{}", username, user),
+        "register".to_string(),
+        "".to_string(),
+    );
+    (StatusCode::OK, Json(json!({ "token": token }))).into_response()
 }
 
 pub async fn login(
@@ -87,9 +91,9 @@ pub async fn login(
     {
         let token = generate_jwt(user_id.clone(), is_admin);
         log_actions(user_id, "login".to_string(), "".to_string());
-        return (StatusCode::OK, Json(json!({ "token": token }))).into_response();
+        (StatusCode::OK, Json(json!({ "token": token }))).into_response()
     } else {
-        return (StatusCode::UNAUTHORIZED, "Invalid username or password").into_response();
+        (StatusCode::UNAUTHORIZED, "Invalid username or password").into_response()
     }
 }
 
@@ -108,14 +112,12 @@ pub fn generate_jwt(user_id: String, admin: bool) -> String {
         exp: exp_timestamp,
     };
 
-    let token = encode(
+    encode(
         &Header::default(),
         &claims,
         &EncodingKey::from_secret(jwt_secret.as_bytes()),
     )
-    .expect("Token encoding failed");
-
-    token
+    .expect("Token encoding failed")
 }
 
 fn verify_token(token: &str) -> Result<AuthUser, (StatusCode, &'static str)> {
@@ -130,18 +132,37 @@ fn verify_token(token: &str) -> Result<AuthUser, (StatusCode, &'static str)> {
     Ok(AuthUser(data.claims))
 }
 
-pub async fn auth_middleware(
+async fn authenticate(
     mut req: Request<Body>,
     next: Next,
+    require_admin: bool,
 ) -> Result<Response, (StatusCode, String)> {
     let user = match get_user_from_request(&req) {
         Ok(user) => user,
         Err((status, message)) => return Err((status, message.to_string())),
     };
 
+    if require_admin && !user.0.admin {
+        return Err((StatusCode::FORBIDDEN, "Access denied".into()));
+    }
+
     req.extensions_mut().insert(user);
 
     Ok(next.run(req).await)
+}
+
+pub async fn auth_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    authenticate(req, next, false).await
+}
+
+pub async fn admin_middleware(
+    req: Request<Body>,
+    next: Next,
+) -> Result<Response, (StatusCode, String)> {
+    authenticate(req, next, true).await
 }
 
 pub async fn get_auth(req: Request<Body>) -> impl IntoResponse {
@@ -159,20 +180,15 @@ pub async fn get_auth(req: Request<Body>) -> impl IntoResponse {
 }
 
 pub fn get_user_from_request(req: &Request<Body>) -> Result<AuthUser, (StatusCode, &'static str)> {
-
     let auth_header = req
         .headers()
         .get("authorization")
         .and_then(|v| v.to_str().ok())
-        .ok_or((
-            StatusCode::UNAUTHORIZED,
-            "Missing Authorization header".into(),
-        ))?;
-
+        .ok_or((StatusCode::UNAUTHORIZED, "Missing Authorization header"))?;
 
     let token = auth_header
         .strip_prefix("Bearer ")
-        .ok_or((StatusCode::UNAUTHORIZED, "Invalid Bearer format".into()))?;
+        .ok_or((StatusCode::UNAUTHORIZED, "Invalid Bearer format"))?;
 
     verify_token(token)
 }

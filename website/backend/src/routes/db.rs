@@ -1,11 +1,6 @@
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
-pub async fn setup_db(db: &SqlitePool) -> Result<(), sqlx::Error> {
-    sqlx::migrate!().run(db).await?;
-    Ok(())
-}
-
 pub async fn create_user(
     db: &SqlitePool,
     username: &str,
@@ -94,8 +89,6 @@ pub async fn get_shares(
  
     Ok(shares)
 }
- 
- 
 
 pub async fn get_shared_file_by_id(
     db: &SqlitePool,

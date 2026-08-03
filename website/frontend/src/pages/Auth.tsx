@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { PasswordStrength } from "../Components/passwordStrength";
 import { EyeInvisibleOutlined, EyeTwoTone } from "@ant-design/icons";
+import { useAlert } from "../Components/Alert";
 
 const { Title, Text } = Typography;
 
@@ -11,13 +12,14 @@ export default function Auth() {
     const location = useLocation();
     const navigate = useNavigate();
     const { login, register } = useAuth();
+    const alert = useAlert();
 
     const isLoginRoute = location.pathname === "/login";
 
     const [mode, setMode] = useState<"login" | "register">(
         isLoginRoute ? "login" : "register"
     );
-    
+
     const [registerForm] = Form.useForm();
     const passwordValue = Form.useWatch("password", registerForm) || "";
 
@@ -45,7 +47,7 @@ export default function Auth() {
         try {
             await login(values.username, values.password);
         } catch (error) {
-            message.error(error instanceof Error ? error.message : "Login failed");
+            alert.error(error instanceof Error ? error.message : "Login failed");
         }
     };
 
@@ -65,7 +67,7 @@ export default function Auth() {
                 justifyContent: "center",
                 alignItems: "center",
                 padding: 24,
-               background: "linear-gradient(135deg, #1c1c1c 0%, #1a2030 45%, #202731 100%)",
+                background: "linear-gradient(135deg, #1c1c1c 0%, #1a2030 45%, #202731 100%)",
             }}
         >
             <div style={{ width: 420, maxWidth: "100%", overflow: "hidden" }}>

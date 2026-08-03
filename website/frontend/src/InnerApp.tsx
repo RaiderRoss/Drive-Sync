@@ -5,6 +5,7 @@ import { MenuOutlined } from '@ant-design/icons';
 
 import Sidebar from './Components/SideBar';
 import Files from './pages/Files';
+import Admin from './pages/Admin';
 import FileViewer from './pages/FileViewer';
 import Auth from './pages/Auth';
 import { RefreshProvider } from './contexts/RefreshContext';
@@ -20,7 +21,9 @@ export default function InnerApp() {
 
   const hideSidebar =
     location.pathname === '/login' ||
-    location.pathname === '/register' || location.pathname.startsWith('/share/');
+    location.pathname === '/register' ||
+    location.pathname.startsWith('/share/') ||
+    location.pathname === '/admin';
 
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -104,6 +107,7 @@ export default function InnerApp() {
                 <Route path="/" element={<Navigate to="/files" />} />
                 <Route path="*" element={<Navigate to="/files" />} />
                 <Route path="/files/*" element={<Files key={location.pathname} />} />
+                <Route path="/admin" element={<Admin />} />
                 <Route path="/file/*" element={<FileViewer />} />
                 <Route path="/login" element={<Auth />} />
                 <Route path="/register" element={<Auth />} />

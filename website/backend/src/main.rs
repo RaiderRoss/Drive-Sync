@@ -11,17 +11,17 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 
-pub mod auth;
-pub mod db;
+pub mod admin;
 pub mod routes;
 pub mod util;
 
-use auth::login;
-
 use crate::{
-    auth::{auth_middleware, get_auth, register_user},
-    db::setup_db,
+    admin::{
+        delete::remove_user,
+        get::{get_users, list_users_shares},
+    },
     routes::{
+        auth::{admin_middleware, auth_middleware, get_auth, login, register_user},
         delete::{delete_file, delete_share_link},
         get::{
             download_file, get_shared_file, list_archive_entries, list_shared_files,
@@ -29,7 +29,7 @@ use crate::{
         },
         post::{create_path, create_shared_path, rename_path, upload_file, upload_root},
     },
-    util::{UPLOAD_DIR, initialize_config},
+    util::{UPLOAD_DIR, initialize_config, setup_db},
 };
 
 type AppState = Arc<Data>;
@@ -54,8 +54,9 @@ async fn main() {
 
     let err = setup_db(&state.db).await;
 
-    if let Err(_) = err {
-        
+    if let Err(e) = err {
+        eprintln!("Failed to set up database: {}", e);
+        return;
     }
 
     let app = create_router(state);
@@ -71,6 +72,7 @@ pub fn create_router(state: AppState) -> Router {
         .allow_methods([Method::GET, Method::POST, Method::DELETE, Method::OPTIONS])
         .allow_headers(Any);
 
+    // Routes for storage operations, protected by authentication middleware
     let protected_routes = Router::new()
         .route("/upload/{*path}", post(upload_file))
         .route("/upload/", post(upload_root))
@@ -87,12 +89,20 @@ pub fn create_router(state: AppState) -> Router {
         .route("/share/{*path}", delete(delete_share_link))
         .layer(middleware::from_fn(auth_middleware));
 
+    let admin_routes = Router::new()
+        .route("/manage/list", get(get_users))
+        .route("/manage/delete/{*id}", delete(remove_user))
+        .route("/manage/files", get(get_users))
+        .route("/manage/shares", get(list_users_shares))
+        .layer(middleware::from_fn(admin_middleware));
+
     Router::new()
         .route("/login", post(login))
         .route("/register", post(register_user))
         .route("/auth", get(get_auth))
         .route("/share/{*path}", get(get_shared_file))
         .merge(protected_routes)
+        .merge(admin_routes)
         .layer(cors)
         .with_state(state)
         .layer(axum::extract::DefaultBodyLimit::disable())
