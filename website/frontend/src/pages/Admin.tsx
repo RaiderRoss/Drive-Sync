@@ -7,7 +7,6 @@ import {
     TeamOutlined,
     ArrowRightOutlined,
     DeleteOutlined,
-    ReloadOutlined,
     UserOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
@@ -129,6 +128,30 @@ export default function Admin() {
         }
     }, [isAdmin]);
 
+    useEffect(() => {
+        if (isAdmin !== true) {
+            return;
+        };
+
+        const events = new EventSource('/api/events');
+
+        events.addEventListener('registered', () => {
+            loadDashboard();
+        });
+
+        events.addEventListener('share_event', () => {
+            loadDashboard();
+        });
+
+        events.onerror = (error) => {
+            console.error('SSE connection error:', error);
+        };
+
+        return () => {
+            events.close();
+        };
+    }, [isAdmin]);
+
     const copyToClipboard = async (value: string, label: string) => {
         try {
             await navigator.clipboard.writeText(value);
@@ -183,7 +206,8 @@ export default function Admin() {
                         }
                         onClick={(e) => {
                             e.stopPropagation();
-                            deleteUser(record.id)
+                            deleteUser(record.id);
+                            loadDashboard();
                         }}
                     />
                 );
@@ -299,7 +323,7 @@ export default function Admin() {
                 <Card
                     style={{
                         ...panelStyle,
-                        minHeight: 132,
+                        minHeight: 100,
                         border: '1px solid #2d2d30',
                         borderRadius: 12,
                     }}
@@ -315,16 +339,13 @@ export default function Admin() {
                         <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 600 }}>
                             {shares.length}
                         </Title>
-                        <Text style={{ color: '#7a7a7e', fontSize: 13 }}>
-                            Active links, copyable or revocable from the shared files view.
-                        </Text>
                     </Space>
                 </Card>
 
                 <Card
                     style={{
                         ...panelStyle,
-                        minHeight: 132,
+                        minHeight: 100,
                         border: '1px solid #2d2d30',
                         borderRadius: 12,
                     }}
@@ -340,16 +361,13 @@ export default function Admin() {
                         <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 600 }}>
                             {users.length}
                         </Title>
-                        <Text style={{ color: '#7a7a7e', fontSize: 13 }}>
-                            {usersAvailable ? 'Loaded from the management endpoint.' : 'Management endpoint is not available yet.'}
-                        </Text>
                     </Space>
                 </Card>
 
                 <Card
                     style={{
                         ...panelStyle,
-                        minHeight: 132,
+                        minHeight: 100,
                         border: '1px solid #2d2d30',
                         borderRadius: 12,
                     }}
@@ -365,7 +383,6 @@ export default function Admin() {
                         <Title level={4} style={{ color: '#ffffff', margin: 0, fontWeight: 600 }}>
                             {user_id || 'Unknown user'}
                         </Title>
-                        <Text style={{ color: '#7a7a7e', fontSize: 13 }}>Admin permissions enabled.</Text>
                     </Space>
                 </Card>
             </div>

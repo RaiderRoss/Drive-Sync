@@ -1,7 +1,5 @@
 use crate::{
-    AppState,
-    routes::db::{create_user, get_user_by_username},
-    util::{self, log_actions},
+    AppState, ServerEvent, routes::db::{create_user, get_user_by_username}, util::{self, log_actions},
 };
 use argon2::{
     Argon2,
@@ -62,6 +60,12 @@ pub async fn register_user(
         "register".to_string(),
         "".to_string(),
     );
+    
+    let _ = state.events.send(ServerEvent {
+        event_type: "registered".to_string(),
+        data: user.clone(),
+    });
+
     (StatusCode::OK, Json(json!({ "token": token }))).into_response()
 }
 

@@ -24,3 +24,4 @@ rand = "0.8"
 flate2 = "1.1.5"
 tar = "0.4.44"
 zip = "2.1.6"
+tokio-stream = {version = "0.1.19", features = ["sync"] }

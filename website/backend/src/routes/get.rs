@@ -267,17 +267,11 @@ pub async fn list_shared_files(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ShareEntryResponse>>, StatusCode> {
+    
     let shares = get_shares(&state.db, &claims.user).await.map_err(|e| {
         eprintln!("list_shared_files: db error: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
-
-    if shares.is_empty() {
-        eprintln!(
-            "list_shared_files: no records found for user {}",
-            claims.user
-        );
-    }
 
     Ok(Json(
         shares

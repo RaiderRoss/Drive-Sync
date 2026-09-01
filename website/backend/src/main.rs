@@ -8,7 +8,7 @@ use axum::{
 use sqlx::SqlitePool;
 
 use std::sync::Arc;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, sync::broadcast};
 use tower_http::cors::{Any, CorsLayer};
 
 pub mod admin;
@@ -19,30 +19,34 @@ use crate::{
     admin::{
         delete::remove_user,
         get::{get_users, list_users_shares},
-    },
-    routes::{
-        auth::{admin_middleware, auth_middleware, get_auth, login, register_user},
-        delete::{delete_file, delete_share_link},
-        get::{
+    }, routes::{
+        auth::{admin_middleware, auth_middleware, get_auth, login, register_user}, delete::{delete_file, delete_share_link}, get::{
             download_file, get_shared_file, list_archive_entries, list_shared_files,
             list_uploaded_files, stream_video,
-        },
-        post::{create_path, create_shared_path, rename_path, upload_file, upload_root},
-    },
-    util::{UPLOAD_DIR, initialize_config, setup_db},
+        }, post::{create_path, create_shared_path, rename_path, upload_file, upload_root}, sse::events_sse,
+    }, util::{UPLOAD_DIR, initialize_config, setup_db},
 };
+
+use serde::Serialize;
+
+#[derive(Clone, Serialize)]
+pub struct ServerEvent {
+    pub event_type: String,
+    pub data: String,
+}
 
 type AppState = Arc<Data>;
 
 #[derive(Clone)]
 pub struct Data {
     pub db: SqlitePool,
+    pub events: broadcast::Sender<ServerEvent>,
 }
 
 #[tokio::main]
 async fn main() {
     initialize_config();
-
+    let (events, _) = broadcast::channel(100);
     let state: AppState = Arc::new(Data {
         db: SqlitePool::connect(&format!(
             "sqlite://{}/users.db?mode=rwc",
@@ -50,6 +54,7 @@ async fn main() {
         ))
         .await
         .unwrap(),
+        events,
     });
 
     let err = setup_db(&state.db).await;
@@ -101,6 +106,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/register", post(register_user))
         .route("/auth", get(get_auth))
         .route("/share/{*path}", get(get_shared_file))
+        .route("/events", get(events_sse))
         .merge(protected_routes)
         .merge(admin_routes)
         .layer(cors)

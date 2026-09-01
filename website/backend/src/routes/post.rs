@@ -16,13 +16,11 @@ use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
-    AppState,
-    routes::{
+    AppState, ServerEvent, routes::{
         auth::{AuthUser, Data},
         db::{change_shared_file_path, check_shared_file_exists, create_shared_file},
         get::get_directory_size,
-    },
-    util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
+    }, util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
 };
 
 pub async fn upload_root(
@@ -70,6 +68,10 @@ pub async fn create_shared_path(
     let id = create_shared_file(&state.db, &owner_id, data).await;
     match id {
         Ok(id) => {
+            let _ = state.events.send(ServerEvent {
+                event_type: "share_event".to_string(),
+                data: owner_id.clone(),
+            });
             log_actions(owner_id, "create_shared_link".into(), data.to_string());
             (StatusCode::OK, Json(Value::String(id))).into_response()
         }
@@ -100,13 +102,14 @@ pub async fn create_file(
     let full_path = upload_root.join(&file_path);
 
     if let Some(parent) = full_path.parent()
-        && let Err(_) = fs::create_dir_all(parent) {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create upload directory",
-            )
-                .into_response();
-        }
+        && let Err(_) = fs::create_dir_all(parent)
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to create upload directory",
+        )
+            .into_response();
+    }
 
     let mut used_bytes = match get_directory_size(upload_root.clone()) {
         Ok(size) => size,
@@ -252,7 +255,9 @@ pub async fn rename_path(
 
     let db = &state.db;
 
-    if change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path).await.is_err()
+    if change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path)
+        .await
+        .is_err()
     {
         eprintln!(
             "rename_path: failed to update shared_files for {} -> {}",
@@ -261,31 +266,24 @@ pub async fn rename_path(
     }
 
     let mut old_full = PathBuf::from(&upload_root);
-    old_full.push(
-        payload
-            .old_path
-            .trim_start_matches(['/', '\\']),
-    );
+    old_full.push(payload.old_path.trim_start_matches(['/', '\\']));
 
     let mut new_full = PathBuf::from(&upload_root);
-    new_full.push(
-        payload
-            .new_path
-            .trim_start_matches(['/', '\\']),
-    );
+    new_full.push(payload.new_path.trim_start_matches(['/', '\\']));
 
     if !old_full.exists() {
         return (StatusCode::NOT_FOUND, "Source path does not exist").into_response();
     }
 
     if let Some(parent) = new_full.parent()
-        && let Err(_) = fs::create_dir_all(parent) {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to prepare destination",
-            )
-                .into_response();
-        }
+        && let Err(_) = fs::create_dir_all(parent)
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to prepare destination",
+        )
+            .into_response();
+    }
 
     match fs::rename(&old_full, &new_full) {
         Ok(_) => {

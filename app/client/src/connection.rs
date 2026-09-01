@@ -19,7 +19,6 @@ use crate::{
 pub fn create_socket() -> Arc<Mutex<Option<WebSocket<MaybeTlsStream<TcpStream>>>>> {
     let socket: Arc<Mutex<Option<WebSocket<MaybeTlsStream<TcpStream>>>>> =
         Arc::new(Mutex::new(None));
-
     {
         let socket_clone = Arc::clone(&socket);
         thread::spawn(move || {
