@@ -32,17 +32,19 @@ use crate::{
 
 pub async fn upload_root(
     Extension(AuthUser(claims)): Extension<AuthUser>,
+    State(state): State<AppState>,
     multipart: Multipart,
 ) -> impl IntoResponse {
-    create_file(PathBuf::new(), multipart, claims).await
+    create_file(PathBuf::new(), multipart, state, claims).await
 }
 
 pub async fn upload_file(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Path(folder_path): Path<String>,
+    State(state): State<AppState>,
     multipart: Multipart,
 ) -> impl IntoResponse {
-    create_file(PathBuf::from(folder_path), multipart, claims).await
+    create_file(PathBuf::from(folder_path), multipart, state, claims).await
 }
 
 pub async fn create_shared_path(
@@ -103,10 +105,12 @@ pub async fn create_shared_path(
 pub async fn create_file(
     relative_path: PathBuf,
     mut multipart: Multipart,
+    state: AppState,
     user: Data,
 ) -> impl IntoResponse {
     let user_id = user.user.clone();
     let upload_root = get_user_path(user_id.clone());
+
     if fs::create_dir_all(&upload_root).is_err() {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -146,6 +150,7 @@ pub async fn create_file(
             .unwrap_or_else(|| format!("upload-{}.bin", Uuid::new_v4()));
 
         let mut final_path = full_path.clone();
+
         if file_path.as_os_str().is_empty() || full_path.is_dir() {
             final_path.push(&file_name);
         }
@@ -153,7 +158,10 @@ pub async fn create_file(
         let mut file = match File::create(&final_path) {
             Ok(f) => f,
             Err(_) => {
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create file")
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to create file",
+                )
                     .into_response();
             }
         };
@@ -163,6 +171,7 @@ pub async fn create_file(
 
             if used_bytes + chunk_len > MAX_STORAGE_BYTES {
                 let _ = fs::remove_file(&final_path);
+
                 return (
                     StatusCode::PAYLOAD_TOO_LARGE,
                     format!(
@@ -174,11 +183,47 @@ pub async fn create_file(
             }
 
             if file.write_all(&chunk).is_err() {
-                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file").into_response();
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to save file",
+                )
+                    .into_response();
             }
 
             used_bytes += chunk_len;
         }
+
+        // Get the path relative to the user's upload root
+        let relative_final_path = final_path
+            .strip_prefix(&upload_root)
+            .unwrap_or(&final_path)
+            .to_string_lossy()
+            .to_string();
+
+        // Get metadata for the actual file
+        let metadata = final_path.metadata().ok();
+
+        // Notify connected clients about the newly created file
+        let _ = state.events.send(ServerEvent {
+            scope: EventScope::User(user_id.clone()),
+            event_type: "file_event".to_string(),
+            data: json!({
+                "action": "create",
+                "path": relative_final_path,
+                "is_dir": false,
+                "size": metadata.as_ref().map(|m| m.len()),
+                "date_modified": metadata
+                    .as_ref()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.elapsed().ok())
+                    .map(|e| e.as_secs()),
+                "file_type": final_path
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(|s| s.to_string()),
+            })
+            .into(),
+        });
     }
 
     log_actions(
@@ -186,7 +231,12 @@ pub async fn create_file(
         "upload".into(),
         full_path.to_string_lossy().to_string(),
     );
-    (StatusCode::OK, "Files uploaded successfully").into_response()
+
+    (
+        StatusCode::OK,
+        "Files uploaded successfully",
+    )
+        .into_response()
 }
 
 pub async fn create_path(

@@ -8,10 +8,7 @@ use serde_json::json;
 use std::fs;
 
 use crate::{
-    AppState,
-    EventScope::Admin,
-    routes::auth::AuthUser,
-    util::{
+    AppState, EventScope::{Admin, User}, routes::auth::AuthUser, util::{
         db::delete_shared_file,
         util::{get_user_path, log_actions},
     },
@@ -19,6 +16,7 @@ use crate::{
 
 pub async fn delete_file(
     Extension(AuthUser(claims)): Extension<AuthUser>,
+    State(state): State<AppState>,
     Path(target_path): Path<String>,
 ) -> impl IntoResponse {
     let user_id = claims.user.clone();
@@ -39,9 +37,19 @@ pub async fn delete_file(
 
     match result {
         Ok(_) => {
-            log_actions(user_id, "delete".to_string(), target_path);
+            log_actions(user_id.clone(), "delete".to_string(), target_path.clone());
+
+            let _ = state.events.send(crate::ServerEvent {
+                scope: User(user_id),
+                event_type: "file_event".to_string(),
+                data: json!({
+                    "action": "delete",
+                    "path": target_path,
+                }).into(),
+            });
             (StatusCode::OK, "Deleted successfully").into_response()
         }
+        
         Err(_) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "Failed to delete file or folder",

@@ -8,6 +8,7 @@ import {
     ArrowRightOutlined,
     DeleteOutlined,
     UserOutlined,
+    ArrowLeftOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
@@ -143,12 +144,14 @@ export default function Admin() {
 
         events.addEventListener('share_event', (event) => {
             const data = JSON.parse(event.data);
-
+            if (data.action === 'delete') {
+                setShares(prev => prev.filter(share => share.id !== data.share_id));
+            }
             if (data.action === 'create') {
                 setShares(prev => [
                     ...prev,
                     {
-                        username: data.created_by,
+                        user_name: data.created_by,
                         id: data.share_id,
                         file_path: data.file_path,
                         created_at: Number(data.created_at),
@@ -318,9 +321,31 @@ export default function Admin() {
         <div style={{ minHeight: '100%', background: '#1c1c1e', padding: '32px 32px 48px' }}>
 
             <div style={{ marginBottom: 28 }}>
-                <Title level={3} style={{ color: '#ffffff', margin: 0, fontWeight: 600, letterSpacing: -0.3 }}>
+                <Button
+                    type="text"
+                    icon={<ArrowLeftOutlined />}
+                    onClick={() => navigate(-1)}
+                    style={{
+                        color: '#b3b3b3',
+                        padding: 10,
+                        marginBottom: 12,
+                    }}
+                >
+                    Back
+                </Button>
+
+                <Title
+                    level={3}
+                    style={{
+                        color: '#ffffff',
+                        margin: 0,
+                        fontWeight: 600,
+                        letterSpacing: -0.3,
+                    }}
+                >
                     Dashboard
                 </Title>
+
                 <Text style={{ color: '#7a7a7e', fontSize: 14 }}>
                     Overview of shared links and user access.
                 </Text>

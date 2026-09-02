@@ -104,6 +104,73 @@ export default function Files() {
     };
 
     useEffect(() => {
+        const events = new EventSource('/api/events');
+
+
+        events.addEventListener('connected', () => {
+            console.log('SSE connected')
+        });
+
+        events.addEventListener('file_event', (event) => {
+
+            try {
+                const data = JSON.parse(event.data);
+
+                if (data.action === 'delete') {
+                    const deletedPath = data.path;
+                    const deletedDir =
+                        deletedPath.split('/').slice(0, -1).join('/') || '/';
+
+                    const currentDir = directory || '/';
+
+                    if (deletedDir === currentDir) {
+
+                        setFiles(prevFiles =>
+                            prevFiles.filter(
+                                file => file.name !== deletedPath.split('/').pop()
+                            )
+                        );
+                    }
+                }
+
+                if (data.action === 'create') {
+                    const createdPath = data.path;
+
+                    const createdDir =
+                        createdPath.split('/').slice(0, -1).join('/') || '/';
+
+                    const currentDir = directory || '/';
+
+                    if (createdDir === currentDir) {
+                        setFiles(prevFiles => [
+                            ...prevFiles,
+                            {
+                                name: createdPath.split('/').pop() || '',
+                                is_dir: data.is_dir,
+                                size: data.size,
+                                date_modified: data.date_modified,
+                                file_type: data.file_type,
+                            }
+                        ]);
+                    }
+                }
+                
+            } catch (err) {
+                console.error('Failed to parse file event:', err);
+            }
+        });
+
+        events.onerror = (error) => {
+            console.error('SSE ERROR:', error);
+        };
+
+        return () => {
+            console.log('Closing SSE connection');
+            events.close();
+        };
+    }, [directory]);
+
+    useEffect(() => {
         fetchFiles();
     }, [directory, refreshTrigger]);
 

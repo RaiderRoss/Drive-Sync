@@ -71,14 +71,14 @@ pub async fn delete_shared_file(db: &SqlitePool, id: &str) -> Result<(), sqlx::E
 pub async fn get_shared_file_by_id(
     db: &SqlitePool,
     id: &str,
-) -> Result<(String, String, String), sqlx::Error> {
+) -> Result<(String, String, i64), sqlx::Error> {
     let row = sqlx::query("SELECT owner_id, file_path, created_at FROM shared_files WHERE id = ?")
         .bind(id)
         .fetch_one(db)
         .await?;
     let owner_id: String = row.get(0);
     let file_path: String = row.get(1);
-    let created_at: String = row.get(2);
+    let created_at :i64= row.get(2);
     Ok((owner_id, file_path, created_at))
 }
 
