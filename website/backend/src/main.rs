@@ -1,10 +1,8 @@
 use axum::{
-    Router,
-    http::Method,
-    middleware,
-    routing::{delete, get, post},
+    Json, Router, http::Method, middleware, routing::{delete, get, post},
 };
 
+use serde_json::Value;
 use sqlx::SqlitePool;
 
 use std::sync::Arc;
@@ -20,19 +18,29 @@ use crate::{
         delete::remove_user,
         get::{get_users, list_users_shares},
     }, routes::{
-        auth::{admin_middleware, auth_middleware, get_auth, login, register_user}, delete::{delete_file, delete_share_link}, get::{
+        auth::{admin_middleware, auth_middleware, get_auth, login, register_user},
+        delete::{delete_file, delete_share_link},
+        get::{
             download_file, get_shared_file, list_archive_entries, list_shared_files,
             list_uploaded_files, stream_video,
-        }, post::{create_path, create_shared_path, rename_path, upload_file, upload_root}, sse::events_sse,
-    }, util::{UPLOAD_DIR, initialize_config, setup_db},
+        },
+        post::{create_path, create_shared_path, rename_path, upload_file, upload_root},
+        sse::events_sse,
+    }, util::util::{UPLOAD_DIR, initialize_config, setup_db}
 };
 
-use serde::Serialize;
+#[derive(Clone)]
+pub enum EventScope {
+    Global,
+    User(String),
+    Admin,
+}
 
-#[derive(Clone, Serialize)]
+#[derive(Clone)]
 pub struct ServerEvent {
+    pub scope: EventScope,
     pub event_type: String,
-    pub data: String,
+    pub data: Json<Value>,
 }
 
 type AppState = Arc<Data>;

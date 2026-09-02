@@ -68,39 +68,18 @@ pub async fn delete_shared_file(db: &SqlitePool, id: &str) -> Result<(), sqlx::E
     Ok(())
 }
 
-pub async fn get_shares(
-    db: &SqlitePool,
-    owner_id: &str,
-) -> Result<Vec<(String, String, i64)>, sqlx::Error> {
-    let rows = sqlx::query("SELECT id, file_path, created_at FROM shared_files WHERE owner_id = ?")
-        .bind(owner_id)
-        .fetch_all(db)
-        .await?;
- 
-    let shares = rows
-        .into_iter()
-        .map(|row| {
-            let id: String = row.get(0);
-            let file_path: String = row.get(1);
-            let created_at: i64 = row.get(2);
-            Ok((id, file_path, created_at))
-        })
-        .collect::<Result<Vec<_>, sqlx::Error>>()?;
- 
-    Ok(shares)
-}
-
 pub async fn get_shared_file_by_id(
     db: &SqlitePool,
     id: &str,
-) -> Result<(String, String), sqlx::Error> {
-    let row = sqlx::query("SELECT owner_id, file_path FROM shared_files WHERE id = ?")
+) -> Result<(String, String, String), sqlx::Error> {
+    let row = sqlx::query("SELECT owner_id, file_path, created_at FROM shared_files WHERE id = ?")
         .bind(id)
         .fetch_one(db)
         .await?;
     let owner_id: String = row.get(0);
     let file_path: String = row.get(1);
-    Ok((owner_id, file_path))
+    let created_at: String = row.get(2);
+    Ok((owner_id, file_path, created_at))
 }
 
 pub async fn change_shared_file_path(
@@ -142,4 +121,78 @@ pub async fn get_user_by_username(
     let hash: String = row.get(1);
     let is_admin: bool = row.get(2);
     Ok((id, hash, is_admin))
+}
+
+pub async fn get_all_users(db: &SqlitePool) -> Result<Vec<(String, String)>, sqlx::Error> {
+    let rows = sqlx::query("SELECT id, username FROM users")
+        .fetch_all(db)
+        .await?;
+
+    let users = rows
+        .into_iter()
+        .map(|row| {
+            let id: String = row.get("id");
+            let username: String = row.get("username");
+            (id, username)
+        })
+        .collect();
+
+    Ok(users)
+}
+
+pub async fn delete_user(user_id: &str, db: &SqlitePool) -> Result<(), sqlx::Error> {
+    sqlx::query("DELETE FROM users WHERE id = ?")
+        .bind(user_id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
+pub async fn get_shares(
+    db: &SqlitePool,
+    owner_id: Option<&str>,
+) -> Result<Vec<(String, String, String, i64)>, sqlx::Error> {
+    let rows = if owner_id.is_none() {
+        sqlx::query(
+            r#"
+            SELECT
+                u.username,
+                s.id,
+                s.file_path,
+                s.created_at
+            FROM shared_files s
+            INNER JOIN users u ON s.owner_id = u.id
+            "#
+        )
+        .fetch_all(db)
+        .await?
+    } else {
+        sqlx::query(
+            r#"
+            SELECT
+                u.username,
+                s.id,
+                s.file_path,
+                s.created_at
+            FROM shared_files s
+            INNER JOIN users u ON s.owner_id = u.id
+            WHERE s.owner_id = ?
+            "#
+        )
+        .bind(owner_id.unwrap())
+        .fetch_all(db)
+        .await?
+    };
+
+    Ok(rows
+        .into_iter()
+        .map(|row| {
+            (
+                row.get("username"),
+                row.get("id"),
+                row.get("file_path"),
+                row.get("created_at"),
+            )
+        })
+        .collect())
 }

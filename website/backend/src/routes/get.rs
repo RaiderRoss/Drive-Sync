@@ -1,7 +1,9 @@
 use crate::AppState;
 use crate::routes::auth::AuthUser;
-use crate::routes::db::{get_shared_file_by_id, get_shares};
-use crate::util::{clean_path, get_user_path};
+use crate::util::{
+    db::{get_shared_file_by_id, get_shares},
+    util::{clean_path, get_user_path},
+};
 use axum::Extension;
 use axum::extract::State;
 use axum::{
@@ -24,7 +26,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
     task,
 };
-use tokio_util::{io::ReaderStream};
+use tokio_util::io::ReaderStream;
 use zip::ZipArchive;
 
 #[derive(Serialize)]
@@ -267,19 +269,20 @@ pub async fn list_shared_files(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ShareEntryResponse>>, StatusCode> {
-    
-    let shares = get_shares(&state.db, &claims.user).await.map_err(|e| {
-        eprintln!("list_shared_files: db error: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let shares = get_shares(&state.db, Some(&claims.user))
+        .await
+        .map_err(|e| {
+            eprintln!("list_shared_files: db error: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     Ok(Json(
         shares
             .into_iter()
             .map(|s| ShareEntryResponse {
-                id: s.0,
-                file_path: s.1,
-                created_at: s.2,
+                id: s.1,
+                file_path: s.2,
+                created_at: s.3,
             })
             .collect(),
     ))
@@ -304,7 +307,7 @@ pub async fn get_shared_file(
             .into_response());
     }
 
-    let (owner_id, file_path) = filename.unwrap();
+    let (owner_id, file_path, _) = filename.unwrap();
 
     let path = get_user_path(owner_id).join(&file_path);
 

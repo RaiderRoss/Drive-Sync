@@ -129,18 +129,32 @@ export default function Admin() {
     }, [isAdmin]);
 
     useEffect(() => {
-        if (isAdmin !== true) {
-            return;
-        };
+        if (isAdmin !== true) return;
 
         const events = new EventSource('/api/events');
+
+        events.addEventListener('connected', () => {
+            console.log('SSE connected');
+        });
 
         events.addEventListener('registered', () => {
             loadDashboard();
         });
 
-        events.addEventListener('share_event', () => {
-            loadDashboard();
+        events.addEventListener('share_event', (event) => {
+            const data = JSON.parse(event.data);
+
+            if (data.action === 'create') {
+                setShares(prev => [
+                    ...prev,
+                    {
+                        username: data.created_by,
+                        id: data.share_id,
+                        file_path: data.file_path,
+                        created_at: Number(data.created_at),
+                    }
+                ]);
+            }
         });
 
         events.onerror = (error) => {

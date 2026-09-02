@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, http::StatusCode};
 use serde::Serialize;
 
-use crate::{AppState, admin::db::{get_all_users, get_shares}};
+use crate::{AppState, util::db::{get_all_users, get_shares}};
 
 #[derive(Serialize)]
 pub struct ShareEntryResponse {
@@ -14,7 +14,7 @@ pub struct ShareEntryResponse {
 pub async fn list_users_shares(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ShareEntryResponse>>, StatusCode> {
-    let shares = get_shares(&state.db).await.map_err(|e| {
+    let shares = get_shares(&state.db, None).await.map_err(|e| {
         eprintln!("list_shared_files: db error: {}", e);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

@@ -1,19 +1,18 @@
 use crate::{
-    AppState, ServerEvent, routes::db::{create_user, get_user_by_username}, util::{self, log_actions},
+    AppState,
+    EventScope::Admin,
+    ServerEvent,
+    util::{util::{self, log_actions},db::{create_user, get_user_by_username}},
 };
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
 };
+use axum_extra::extract::cookie::{Cookie, SameSite};
 use rand::rngs::OsRng;
 
 use axum::{
-    Json,
-    body::Body,
-    extract::State,
-    http::{Request, StatusCode},
-    middleware::Next,
-    response::{IntoResponse, Response},
+    Json, body::Body, extract::State, http::{Request, StatusCode, header::SET_COOKIE}, middleware::Next, response::{IntoResponse, Response},
 };
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
@@ -60,13 +59,29 @@ pub async fn register_user(
         "register".to_string(),
         "".to_string(),
     );
-    
+
     let _ = state.events.send(ServerEvent {
+        scope: Admin,
         event_type: "registered".to_string(),
-        data: user.clone(),
+        data: json!({
+            "user": user,
+            "username": username,
+        }).into(),
     });
 
-    (StatusCode::OK, Json(json!({ "token": token }))).into_response()
+    let cookie = Cookie::build(("sse_token", token.clone()))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .path("/api/events")
+        .secure(false)
+        .build();
+
+    (
+        StatusCode::OK,
+        [(SET_COOKIE, cookie.to_string())],
+        Json(json!({ "token": token })),
+    )
+        .into_response()
 }
 
 pub async fn login(
@@ -95,7 +110,19 @@ pub async fn login(
     {
         let token = generate_jwt(user_id.clone(), is_admin);
         log_actions(user_id, "login".to_string(), "".to_string());
-        (StatusCode::OK, Json(json!({ "token": token }))).into_response()
+        let cookie = Cookie::build(("sse_token", token.clone()))
+            .http_only(true)
+            .same_site(SameSite::Lax)
+            .path("/api/events")
+            .secure(false)
+            .build();
+
+        (
+            StatusCode::OK,
+            [(SET_COOKIE, cookie.to_string())],
+            Json(json!({ "token": token })),
+        )
+            .into_response()
     } else {
         (StatusCode::UNAUTHORIZED, "Invalid username or password").into_response()
     }
@@ -124,7 +151,7 @@ pub fn generate_jwt(user_id: String, admin: bool) -> String {
     .expect("Token encoding failed")
 }
 
-fn verify_token(token: &str) -> Result<AuthUser, (StatusCode, &'static str)> {
+pub fn verify_token(token: &str) -> Result<AuthUser, (StatusCode, &'static str)> {
     let secret = util::JWT_SECRET.get().expect("JWT_SECRET not set");
     let data = decode::<Data>(
         token,

@@ -4,12 +4,17 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use serde_json::json;
 use std::fs;
 
 use crate::{
     AppState,
-    routes::{auth::AuthUser, db::delete_shared_file},
-    util::{get_user_path, log_actions},
+    EventScope::Admin,
+    routes::auth::AuthUser,
+    util::{
+        db::delete_shared_file,
+        util::{get_user_path, log_actions},
+    },
 };
 
 pub async fn delete_file(
@@ -49,7 +54,6 @@ pub async fn delete_share_link(
     Path(id): Path<String>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    println!("Deleting share link with ID: {}", id);
     let db = &state.db;
 
     let res = delete_shared_file(db, &id).await;
@@ -57,8 +61,12 @@ pub async fn delete_share_link(
     match res {
         Ok(_) => {
             let _ = state.events.send(crate::ServerEvent {
+                scope: Admin,
                 event_type: "share_event".to_string(),
-                data: id.clone(),
+                data: json!({
+                    "action": "delete",
+                    "share_id": id,
+                }).into(),
             });
             (StatusCode::OK, "Share link deleted successfully").into_response()
         }

@@ -12,15 +12,22 @@ use axum::{
 };
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{Value, json};
 use uuid::Uuid;
 
 use crate::{
-    AppState, ServerEvent, routes::{
+    AppState, EventScope, ServerEvent,
+    routes::{
         auth::{AuthUser, Data},
-        db::{change_shared_file_path, check_shared_file_exists, create_shared_file},
         get::get_directory_size,
-    }, util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
+    },
+    util::{
+        db::{
+            change_shared_file_path, check_shared_file_exists, create_shared_file,
+            get_shared_file_by_id,
+        },
+        util::{MAX_STORAGE_BYTES, get_user_path, log_actions},
+    },
 };
 
 pub async fn upload_root(
@@ -68,9 +75,19 @@ pub async fn create_shared_path(
     let id = create_shared_file(&state.db, &owner_id, data).await;
     match id {
         Ok(id) => {
+            let created_at = get_shared_file_by_id(&state.db, &id).await;
+            let created_at = created_at.unwrap().2;
             let _ = state.events.send(ServerEvent {
+                scope: EventScope::Admin,
                 event_type: "share_event".to_string(),
-                data: owner_id.clone(),
+                data: json!({
+                    "action": "create",
+                    "share_id": id,
+                    "file_path": data,
+                    "created_by": owner_id,
+                    "created_at": created_at,
+                })
+                .into(),
             });
             log_actions(owner_id, "create_shared_link".into(), data.to_string());
             (StatusCode::OK, Json(Value::String(id))).into_response()
