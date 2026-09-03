@@ -9,7 +9,7 @@ import Admin from './pages/Admin';
 import FileViewer from './pages/FileViewer';
 import Auth from './pages/Auth';
 import { RefreshProvider } from './contexts/RefreshContext';
-import { AlertProvider } from './Components/Alert';
+import { AlertProvider, useAlert } from './Components/Alert';
 import SharesViewer from './pages/SharedViewer';
 
 const { Content, Sider } = Layout;
@@ -18,7 +18,7 @@ const SIDEBAR_WIDTH = 250;
 
 export default function InnerApp() {
   const location = useLocation();
-
+  const alert = useAlert();
   const hideSidebar =
     location.pathname === '/login' ||
     location.pathname === '/register' ||
@@ -41,6 +41,33 @@ export default function InnerApp() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    const events = new EventSource('/api/events');
+    events.addEventListener('connected', () => {
+      console.log('SSE connected');
+    });
+
+    events.addEventListener('alert', (event) => {
+      const data = JSON.parse(event.data);
+      const message = data.message;
+      if (data.type === 'error') {
+        alert.error(message);
+      }
+      if (data.type === 'success') {
+        alert.success(message);
+      }
+    });
+
+    events.onerror = (err) => {
+      console.error('SSE error:', err);
+      events.close();
+    };
+
+    return () => {
+      events.close();
+    };
+  }, []);
+
   const sidebarVisible = !hideSidebar && !isMobile;
   const alertOffsetLeft = sidebarVisible ? SIDEBAR_WIDTH / 2 : 0;
 
@@ -60,7 +87,6 @@ export default function InnerApp() {
             />
           )}
 
-          {/* sidebar */}
           {!hideSidebar && (
             <Sider
               width={SIDEBAR_WIDTH}
@@ -84,8 +110,6 @@ export default function InnerApp() {
 
           <Layout>
             <Content style={{ background: '#252525', height: '100vh' }}>
-
-              {/* mobile menu */}
               {isMobile && !hideSidebar && (
                 <Button
                   type="text"

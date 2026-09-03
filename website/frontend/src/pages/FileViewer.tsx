@@ -111,14 +111,6 @@ export default function FileViewer() {
     };
 
     useEffect(() => {
-        // For /file/:path the filename in the URL is real and has an
-        // extension we can trust as a hint. For /share/:id the "filename"
-        // is actually a share UUID with no extension — the real file type
-        // is only known server-side. So we always do a single fetch and
-        // classify the result by the response's Content-Type header
-        // (which serve_file/serve_video already set correctly), falling
-        // back to the URL extension only as a hint for syntax highlighting
-        // language on text files.
         let objectUrl: string | null = null;
         let cancelled = false;
 
@@ -134,8 +126,6 @@ export default function FileViewer() {
         const classify = (contentType: string, disposition: string | null): 'image' | 'video' | 'audio' | 'pdf' | 'archive' | 'text' => {
             const type = contentType.toLowerCase();
 
-            // Prefer the real filename from Content-Disposition if the server sent one
-            // (useful for /share where the URL itself has no extension).
             let realExt = urlExt;
             if (disposition) {
                 const match = disposition.match(/filename="?([^"]+)"?/i);
@@ -149,9 +139,6 @@ export default function FileViewer() {
             if (type.startsWith('audio/')) return 'audio';
             if (type.includes('pdf')) return 'pdf';
             if (type.includes('zip') || type.includes('x-tar') || type.includes('gzip')) return 'archive';
-
-            // Content-Type was generic (e.g. application/octet-stream) — fall
-            // back to whatever extension we have.
             if (realExt === 'zip') return 'archive';
             if (realExt === 'tar' || realExt === 'tgz' || realExt === 'gz') return 'archive';
             if (filename.toLowerCase().endsWith('.tar.gz')) return 'archive';
@@ -186,7 +173,6 @@ export default function FileViewer() {
                     const text = await res.text();
                     if (cancelled) return;
                     setFileType('text');
-                    // Use Content-Disposition filename if we got one, else URL extension.
                     let langExt = urlExt;
                     if (disposition) {
                         const match = disposition.match(/filename="?([^"]+)"?/i);
@@ -243,14 +229,10 @@ export default function FileViewer() {
                 URL.revokeObjectURL(objectUrl);
             }
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [filename]);
 
     useEffect(() => {
         if (fileType === 'pdf' && previewSrc && window.innerWidth <= 768) {
-            // Auto-open immediately once the blob is ready. Chrome may
-            // silently block this since it's not inside a direct click
-            // handler — the fallback button below covers that case.
             window.open(previewSrc, '_blank');
         }
     }, [fileType, previewSrc]);
@@ -397,13 +379,6 @@ export default function FileViewer() {
             }}>
                 {fileType === 'pdf' && previewSrc && (
                     window.innerWidth <= 768 ? (
-                        // Mobile Chrome/Android won't reliably render a blob:
-                        // URL embedded in an <iframe> — the native PDF
-                        // viewer plugin only behaves correctly on a real,
-                        // top-level page load. The useEffect above already
-                        // tried window.open() automatically; this button is
-                        // the fallback in case the browser silently blocked
-                        // that auto-open as a popup.
                         <div
                             style={{
                                 display: 'flex',

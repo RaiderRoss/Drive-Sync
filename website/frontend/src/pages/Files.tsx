@@ -312,57 +312,46 @@ export default function Files() {
     const getFileIcon = (filename: string) => {
         const ext = filename.toLowerCase().split('.').pop();
 
-        // PDF files
         if (ext === 'pdf') {
             return <FaFilePdf style={{ fontSize: 16, color: '#ff0000' }} />;
         }
 
-        // Audio files
         if (['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma', 'aiff'].includes(ext || '')) {
             return <FaFileAudio style={{ fontSize: 16, color: '#9b59b6' }} />;
         }
 
-        // Image files
         if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp', 'ico', 'tiff', 'tif'].includes(ext || '')) {
             return <FaFileImage style={{ fontSize: 16, color: '#3498db' }} />;
         }
 
-        // Video files
         if (['mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v', 'mpeg', 'mpg'].includes(ext || '')) {
             return <FaFileVideo style={{ fontSize: 16, color: '#e74c3c' }} />;
         }
 
-        // Archive files
         if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'iso'].includes(ext || '')) {
             return <FaFileArchive style={{ fontSize: 16, color: '#f39c12' }} />;
         }
 
-        // Code files
         if (['js', 'jsx', 'ts', 'tsx', 'py', 'java', 'cpp', 'c', 'cs', 'php', 'rb', 'go', 'rs', 'html', 'css', 'json', 'xml', 'yaml', 'yml'].includes(ext || '')) {
             return <FaFileCode style={{ fontSize: 16, color: '#2ecc71' }} />;
         }
 
-        // Word documents
         if (['doc', 'docx', 'odt', 'rtf'].includes(ext || '')) {
             return <FaFileWord style={{ fontSize: 16, color: '#2b579a' }} />;
         }
 
-        // Excel documents
         if (['xls', 'xlsx', 'ods', 'csv'].includes(ext || '')) {
             return <FaFileExcel style={{ fontSize: 16, color: '#217346' }} />;
         }
 
-        // PowerPoint documents
         if (['ppt', 'pptx', 'odp'].includes(ext || '')) {
             return <FaFilePowerpoint style={{ fontSize: 16, color: '#d24726' }} />;
         }
 
-        // Text files
         if (['txt', 'md', 'log', 'cfg', 'ini', 'conf'].includes(ext || '')) {
             return <FaFileAlt style={{ fontSize: 16, color: '#95a5a6' }} />;
         }
 
-        // Default file icon
         return <FileFilled style={{ fontSize: 16, color: '#b3b3b3' }} />;
     };
 
