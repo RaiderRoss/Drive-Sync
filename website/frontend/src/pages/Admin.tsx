@@ -130,8 +130,6 @@ export default function Admin() {
     }, [isAdmin]);
 
     useEffect(() => {
-        if (isAdmin !== true) return;
-
         const events = new EventSource('/api/events');
 
         events.addEventListener('connected', () => {

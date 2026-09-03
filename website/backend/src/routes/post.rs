@@ -146,10 +146,7 @@ pub async fn create_shared_path(
     Extension(AuthUser(claims)): Extension<AuthUser>,
     Json(path): Json<Value>,
 ) -> impl IntoResponse {
-    let data = path
-        .get("path")
-        .and_then(|p| p.as_str())
-        .unwrap_or("");
+    let data = path.get("path").and_then(|p| p.as_str()).unwrap_or("");
 
     let owner_id = claims.user.clone();
 
@@ -193,11 +190,22 @@ pub async fn create_shared_path(
                 .into(),
             });
 
-            log_actions(
-                owner_id,
-                "create_shared_link".into(),
-                data.to_string(),
-            );
+            if !claims.admin {
+                let _ = state.events.send(ServerEvent {
+                    scope: EventScope::User(owner_id.clone()),
+                    event_type: "share_event".to_string(),
+                    data: json!({
+                        "action": "create",
+                        "share_id": id,
+                        "file_path": data,
+                        "created_by": owner_id,
+                        "created_at": created_at,
+                    })
+                    .into(),
+                });
+            }
+
+            log_actions(owner_id, "create_shared_link".into(), data.to_string());
 
             (StatusCode::OK, Json(Value::String(id))).into_response()
         }
@@ -295,10 +303,7 @@ pub async fn create_file(
         let mut file = match File::create(&final_path) {
             Ok(f) => f,
             Err(_) => {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to create file",
-                )
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create file")
                     .into_response();
             }
         };
@@ -320,11 +325,7 @@ pub async fn create_file(
             }
 
             if file.write_all(&chunk).is_err() {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Failed to save file",
-                )
-                    .into_response();
+                return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to save file").into_response();
             }
 
             used_bytes += chunk_len;
@@ -369,11 +370,7 @@ pub async fn create_file(
         full_path.to_string_lossy().to_string(),
     );
 
-    (
-        StatusCode::OK,
-        "Files uploaded successfully",
-    )
-        .into_response()
+    (StatusCode::OK, "Files uploaded successfully").into_response()
 }
 
 /// Creates a new file or directory for the authenticated user.
@@ -415,11 +412,7 @@ pub async fn create_path(
     }
 
     if full_path.trim().is_empty() {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Path cannot be empty",
-        )
-            .into_response();
+        return (StatusCode::BAD_REQUEST, "Path cannot be empty").into_response();
     }
 
     let user_id = claims.user.clone();
@@ -430,16 +423,10 @@ pub async fn create_path(
 
     if full_path.ends_with('/') {
         match fs::create_dir_all(&path_buf) {
-            Ok(_) => (
-                StatusCode::OK,
-                "Folder created successfully",
-            )
-                .into_response(),
-            Err(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create folder",
-            )
-                .into_response(),
+            Ok(_) => (StatusCode::OK, "Folder created successfully").into_response(),
+            Err(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create folder").into_response()
+            }
         }
     } else {
         match fs::File::create(&path_buf) {
@@ -450,17 +437,9 @@ pub async fn create_path(
                     path_buf.to_string_lossy().to_string(),
                 );
 
-                (
-                    StatusCode::OK,
-                    "File created successfully",
-                )
-                    .into_response()
+                (StatusCode::OK, "File created successfully").into_response()
             }
-            Err(_) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Failed to create file",
-            )
-                .into_response(),
+            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to create file").into_response(),
         }
     }
 }
@@ -520,9 +499,7 @@ pub async fn rename_path(
     let user_id = claims.user.clone();
     let upload_root = get_user_path(claims.user);
 
-    if payload.old_path.trim().is_empty()
-        || payload.new_path.trim().is_empty()
-    {
+    if payload.old_path.trim().is_empty() || payload.new_path.trim().is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             "Both old_path and new_path are required",
@@ -530,9 +507,7 @@ pub async fn rename_path(
             .into_response();
     }
 
-    if payload.old_path.contains("..")
-        || payload.new_path.contains("..")
-    {
+    if payload.old_path.contains("..") || payload.new_path.contains("..") {
         return (
             StatusCode::BAD_REQUEST,
             "Invalid path with '..' not allowed",
@@ -543,51 +518,29 @@ pub async fn rename_path(
     if std::path::Path::new(&payload.old_path).is_absolute()
         || std::path::Path::new(&payload.new_path).is_absolute()
     {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Absolute paths are not allowed",
-        )
-            .into_response();
+        return (StatusCode::BAD_REQUEST, "Absolute paths are not allowed").into_response();
     }
 
     let db = &state.db;
 
-    if change_shared_file_path(
-        db,
-        &user_id,
-        &payload.old_path,
-        &payload.new_path,
-    )
-    .await
-    .is_err()
+    if change_shared_file_path(db, &user_id, &payload.old_path, &payload.new_path)
+        .await
+        .is_err()
     {
         eprintln!(
             "rename_path: failed to update shared_files for {} -> {}",
-            payload.old_path,
-            payload.new_path
+            payload.old_path, payload.new_path
         );
     }
 
     let mut old_full = PathBuf::from(&upload_root);
-    old_full.push(
-        payload
-            .old_path
-            .trim_start_matches(['/', '\\']),
-    );
+    old_full.push(payload.old_path.trim_start_matches(['/', '\\']));
 
     let mut new_full = PathBuf::from(&upload_root);
-    new_full.push(
-        payload
-            .new_path
-            .trim_start_matches(['/', '\\']),
-    );
+    new_full.push(payload.new_path.trim_start_matches(['/', '\\']));
 
     if !old_full.exists() {
-        return (
-            StatusCode::NOT_FOUND,
-            "Source path does not exist",
-        )
-            .into_response();
+        return (StatusCode::NOT_FOUND, "Source path does not exist").into_response();
     }
 
     if let Some(parent) = new_full.parent()
@@ -612,16 +565,8 @@ pub async fn rename_path(
                 ),
             );
 
-            (
-                StatusCode::OK,
-                "Path renamed successfully",
-            )
-                .into_response()
+            (StatusCode::OK, "Path renamed successfully").into_response()
         }
-        Err(_) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Failed to rename path",
-        )
-            .into_response(),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Failed to rename path").into_response(),
     }
 }

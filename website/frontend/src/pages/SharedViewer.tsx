@@ -44,6 +44,40 @@ export default function SharesViewer() {
         fetchShares();
     }, []);
 
+    useEffect(() => {
+        const events = new EventSource('/api/events');
+        events.addEventListener('connected', () => {
+            console.log('SSE connected');
+        });
+
+        events.addEventListener('share_event', (event) => {
+            const data = JSON.parse(event.data);
+            if (data.action === 'delete') {
+                setShares(prev => prev.filter(share => share.id !== data.share_id));
+            }
+
+            if (data.action === 'create') {
+                setShares(prev => [
+                    ...prev,
+                    {
+                        user_name: data.created_by,
+                        id: data.share_id,
+                        file_path: data.file_path,
+                        created_at: Number(data.created_at),
+                    }
+                ]);
+            }
+
+        });
+
+        events.addEventListener('error', (err) => {
+            console.error('SSE error:', err);
+        });
+        return () => {
+            events.close();
+        };
+    }, []);
+
     const unshare = async (share: ShareEntry) => {
         try {
             const res = await fetch(`${API_BASE}/share/${encodeURIComponent(share.id)}`, {

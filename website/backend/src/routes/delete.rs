@@ -66,7 +66,6 @@ pub async fn delete_file(
     State(state): State<AppState>,
     Path(target_path): Path<String>,
 ) -> impl IntoResponse {
-
     let user_id = claims.user.clone();
 
     let mut path = get_user_path(claims.user);
@@ -95,7 +94,8 @@ pub async fn delete_file(
                 data: json!({
                     "action": "delete",
                     "path": target_path,
-                }).into(),
+                })
+                .into(),
             });
 
             (StatusCode::OK, "Deleted successfully").into_response()
@@ -132,24 +132,38 @@ pub async fn delete_file(
 /// Returns `500 Internal Server Error` when the shared-file database record
 /// cannot be deleted.
 pub async fn delete_share_link(
-    Path(id): Path<String>,
     State(state): State<AppState>,
+    Extension(AuthUser(claims)): Extension<AuthUser>,
+    Path(id): Path<String>,
 ) -> impl IntoResponse {
-
     let db = &state.db;
 
     let res = delete_shared_file(db, &id).await;
 
     match res {
         Ok(_) => {
+            let user_id = claims.user.clone();
             let _ = state.events.send(crate::ServerEvent {
                 scope: Admin,
                 event_type: "share_event".to_string(),
                 data: json!({
                     "action": "delete",
                     "share_id": id,
-                }).into(),
+                })
+                .into(),
             });
+
+            if !claims.admin {
+                let _ = state.events.send(crate::ServerEvent {
+                    scope: User(user_id),
+                    event_type: "share_event".to_string(),
+                    data: json!({
+                        "action": "delete",
+                        "share_id": id,
+                    })
+                    .into(),
+                });
+            }
 
             (StatusCode::OK, "Share link deleted successfully").into_response()
         }
