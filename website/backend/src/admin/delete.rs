@@ -62,7 +62,7 @@ pub async fn remove_user(
 
     match delete_user(&user_id, db).await {
         Ok(_) => (StatusCode::OK, "User deleted successfully").into_response(),
-
+        
         Err(e) => {
             eprintln!("Failed to delete user from database: {}", e);
 

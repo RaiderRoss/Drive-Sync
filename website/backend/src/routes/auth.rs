@@ -154,8 +154,10 @@ pub async fn register_user(
         scope: Admin,
         event_type: "registered".to_string(),
         data: json!({
-            "user": user,
+            "action": "create",
+            "user_id": user,
             "username": username,
+            "is_admin": false
         }).into(),
     });
 

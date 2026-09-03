@@ -136,8 +136,22 @@ export default function Admin() {
             console.log('SSE connected');
         });
 
-        events.addEventListener('registered', () => {
-            loadDashboard();
+        events.addEventListener('registered', (event) => {
+            const data = JSON.parse(event.data);
+            if (data.action === 'create') {
+                setUsers(prev => [
+                    ...prev,
+                    {
+                        id: data.user_id,
+                        username: data.username,
+                        is_admin: data.is_admin,
+                    }
+                ]);
+            }
+
+            if (data.action === 'delete') {
+                setUsers(prev => prev.filter(user => user.id !== data.user_id));
+            }
         });
 
         events.addEventListener('share_event', (event) => {
@@ -222,7 +236,7 @@ export default function Admin() {
                         onClick={(e) => {
                             e.stopPropagation();
                             deleteUser(record.id);
-                            loadDashboard();
+                            setUsers(prev => prev.filter(user => user.id !== record.id));
                         }}
                     />
                 );

@@ -18,6 +18,7 @@ use std::{
 };
 
 use sqlx::SqlitePool;
+use tokio::sync::broadcast;
 
 /// Root directory used for storing uploaded files.
 pub static UPLOAD_DIR: OnceLock<String> = OnceLock::new();
@@ -214,3 +215,45 @@ pub async fn setup_db(db: &SqlitePool) -> Result<(), sqlx::Error> {
     Ok(())
 }
 
+/// Sends an alert event through the application's broadcast channel.
+///
+/// The event is scoped either to a specific user or globally depending on
+/// whether a user ID is provided. The event is sent with the event type
+/// `alert` and the supplied JSON data as its payload.
+///
+/// # Arguments
+///
+/// * `state_events` - Broadcast channel used to send the server event.
+/// * `user_id` - Optional ID of the user who should receive the event. If
+///   `Some`, the event is user-specific; if `None`, the event is global.
+/// * `data` - JSON data containing the alert payload.
+///
+/// # Side Effects
+///
+/// Sends a [`crate::ServerEvent`] through the broadcast channel. Any error
+/// returned by the channel send operation is ignored.
+pub fn send_message(
+    state_events: &broadcast::Sender<crate::ServerEvent>,
+    user_id: Option<String>,
+    data: serde_json::Value,
+) {
+
+   let scope = match user_id {
+
+        Some(id) => crate::EventScope::User(id),
+
+        None => crate::EventScope::Global,
+
+    };
+
+    let _ = state_events.send(crate::ServerEvent {
+
+        scope,
+
+        event_type: "alert".to_string(),
+
+        data: data.into(),
+
+    });
+
+}
