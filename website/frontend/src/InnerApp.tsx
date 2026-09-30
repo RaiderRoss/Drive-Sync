@@ -11,6 +11,7 @@ import Auth from './pages/Auth';
 import { RefreshProvider } from './contexts/RefreshContext';
 import { AlertProvider, useAlert } from './Components/Alert';
 import SharesViewer from './pages/SharedViewer';
+import About from './pages/About';
 
 const { Content, Sider } = Layout;
 
@@ -18,8 +19,8 @@ const SIDEBAR_WIDTH = 250;
 
 export default function InnerApp() {
   const location = useLocation();
-  const alert = useAlert();
   const hideSidebar =
+    location.pathname === '/' ||
     location.pathname === '/login' ||
     location.pathname === '/register' ||
     location.pathname.startsWith('/share/') ||
@@ -41,38 +42,12 @@ export default function InnerApp() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  useEffect(() => {
-    const events = new EventSource('/api/events');
-    events.addEventListener('connected', () => {
-      console.log('SSE connected');
-    });
-
-    events.addEventListener('alert', (event) => {
-      const data = JSON.parse(event.data);
-      const message = data.message;
-      if (data.type === 'error') {
-        alert.error(message);
-      }
-      if (data.type === 'success') {
-        alert.success(message);
-      }
-    });
-
-    events.onerror = (err) => {
-      console.error('SSE error:', err);
-      events.close();
-    };
-
-    return () => {
-      events.close();
-    };
-  }, []);
-
   const sidebarVisible = !hideSidebar && !isMobile;
   const alertOffsetLeft = sidebarVisible ? SIDEBAR_WIDTH / 2 : 0;
 
   return (
     <AlertProvider offsetLeft={alertOffsetLeft}>
+      <AlertEventListener />
       <RefreshProvider>
         <Layout style={{ height: '100vh', overflow: 'hidden', background: '#1c1c1c' }}>
           {isMobile && !collapsed && !hideSidebar && (
@@ -128,7 +103,8 @@ export default function InnerApp() {
               )}
 
               <Routes>
-                <Route path="/" element={<Navigate to="/files" />} />
+                <Route path="/" element={<About />} />
+                <Route path="/about" element={<About />} />
                 <Route path="*" element={<Navigate to="/files" />} />
                 <Route path="/files/*" element={<Files key={location.pathname} />} />
                 <Route path="/admin" element={<Admin />} />
@@ -146,4 +122,37 @@ export default function InnerApp() {
       </RefreshProvider>
     </AlertProvider>
   );
+}
+
+function AlertEventListener() {
+  const alert = useAlert();
+
+  useEffect(() => {
+    const events = new EventSource('/api/events');
+    events.addEventListener('connected', () => {
+      console.log('SSE connected');
+    });
+
+    events.addEventListener('alert', (event) => {
+      const data = JSON.parse(event.data);
+      const message = data.message;
+      if (data.type === 'error') {
+        alert.error(message);
+      }
+      if (data.type === 'success') {
+        alert.success(message);
+      }
+    });
+
+    events.onerror = (err) => {
+      console.error('SSE error:', err);
+      events.close();
+    };
+
+    return () => {
+      events.close();
+    };
+  }, [alert]);
+
+  return null;
 }

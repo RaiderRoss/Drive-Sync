@@ -15,6 +15,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const API_BASE = "/api";
 
 const isPublicPath = (pathname: string): boolean => {
+    if (pathname === "/") return true;
     if (pathname === "/login" || pathname === "/register") return true;
     if (pathname.startsWith("/share/")) return true;
     return false;
