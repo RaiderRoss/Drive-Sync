@@ -1,0 +1,367 @@
+:root {
+  /* Windows 11 Dark Theme Colors */
+  --bg-primary: #1c1c1c;
+  /* Darker - for sidebar */
+  --bg-secondary: #252525;
+  /* Lighter - for main content area */
+  --bg-tertiary: #252525;
+  /* Lighter - for tables and cards */
+  --bg-hover: #2d2d2d;
+  --bg-selected: #3a3a3a;
+  --border-color: #2d2d2d;
+  --text-primary: #ffffff;
+  --text-secondary: #b3b3b3;
+  --accent-color: #0078d4;
+  --accent-hover: #106ebe;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+#root {
+  min-height: 100dvh;   /* fall back to 100vh if you need older browsers */
+  display: flex;
+  flex-direction: column;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* ===== Page styles (page.tsx) ============================================ */
+
+.dv-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  box-sizing: border-box;
+  text-align: left;
+  /* The body stays at the browser default; antd is tuned for 14px. */
+  font-size: 14px;
+  line-height: 1.5715;
+  letter-spacing: normal;
+}
+
+
+/* Toolbar ----------------------------------------------------------- */
+
+.dv-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.dv-toolbar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Stats ------------------------------------------------------------- */
+
+.dv-stat .ant-statistic-title {
+  font-size: 11px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.dv-stat .ant-statistic-content {
+  font-size: 22px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Canvas ------------------------------------------------------------ */
+
+/* The row takes whatever height is left under the toolbar and stats. */
+.dv-panels {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Let each Col stretch its child. The hidden Col keeps its inline display:none. */
+.dv-panels > .ant-col {
+  display: flex;
+  flex-direction: column;
+}
+
+.dv-canvas-panel {
+  flex: 1;                 /* grow to the bottom of the page */
+  min-height: 420px;       /* never get smaller than this, the page scrolls instead */
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
+}
+
+/* Whatever Canvas renders (.dv-root) fills the panel. */
+.dv-canvas-panel > * {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Inspector --------------------------------------------------------- */
+
+.dv-inspector {
+  height: auto;            /* keep natural height; the Col is now a flex column */
+}
+
+.dv-entry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dv-entry .ant-typography {
+  min-width: 0;
+}
+
+.dv-page .dv-size.ant-typography {
+  margin: 0 0 2px;
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+}
+
+.dv-descriptions {
+  margin-top: 16px;
+}
+
+.dv-page .dv-section.ant-typography {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.dv-inspector .ant-divider {
+  margin: 16px 0;
+}
+
+.dv-share {
+  margin-top: 14px;
+}
+
+.dv-share__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dv-share .ant-progress {
+  margin: 2px 0 0;
+  line-height: 1;
+}
+
+.dv-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.dv-open {
+  margin-top: 16px;
+}
+
+/* Path bar: breadcrumb that turns into an editable path ------------- */
+
+.dv-pathbar {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 4px 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  cursor: text;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dv-pathbar:hover {
+  border-color: var(--bg-selected);
+  background: var(--bg-hover);
+}
+
+.dv-pathbar .ant-breadcrumb {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.dv-pathbar .ant-breadcrumb ol {
+  flex-wrap: nowrap;
+}
+
+.dv-pathbar__edit {
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.dv-pathbar:hover .dv-pathbar__edit {
+  opacity: 1;
+}
+
+.dv-pathbar--editing {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.dv-pathbar--editing .ant-input-affix-wrapper,
+.dv-pathbar--editing .ant-input {
+  height: 34px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+
+/* Contents list ------------------------------------------------------ */
+
+.dv-list__tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.dv-list__tools .ant-input-affix-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.dv-list__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 520px;
+  overflow-y: auto;
+  margin-right: -6px;
+  padding-right: 6px;
+}
+
+.dv-item {
+  appearance: none;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto 52px;
+  grid-template-rows: auto 4px;
+  column-gap: 10px;
+  row-gap: 6px;
+  align-items: center;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.dv-item:hover {
+  background: var(--bg-hover);
+}
+
+.dv-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.dv-item[aria-selected="true"] {
+  background: var(--bg-selected);
+  border-color: color-mix(in srgb, var(--item) 45%, transparent);
+}
+
+.dv-item__icon {
+  display: flex;
+  justify-content: center;
+}
+
+.dv-item__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.dv-item__size,
+.dv-item__share {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.dv-item__size {
+  color: var(--text-primary);
+}
+
+.dv-item__share {
+  color: var(--text-secondary);
+}
+
+.dv-item__bar {
+  grid-column: 2 / -1;
+  height: 4px;
+  border-radius: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text-secondary) 14%, transparent);
+}
+
+.dv-item__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--item);
+  transition: width 0.3s ease;
+}
+
+/* Responsive -------------------------------------------------------- */
+
+@media (max-width: 1024px) {
+  .dv-page {
+    padding: 16px;
+  }
+
+  .dv-canvas-panel {
+    min-height: 480px;   /* was height: 480px */
+  }
+}
+
+@media (max-width: 560px) {
+  .dv-page {
+    padding: 12px;
+    gap: 12px;
+  }
+
+  .dv-canvas-panel {
+    min-height: 360px;   /* was height: 400px / min-height: 360px */
+  }
+}
