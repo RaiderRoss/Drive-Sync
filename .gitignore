@@ -8,4 +8,6 @@ logs.toml
 
 # Environment files and database files
 .env
-.db
+*.db
+*.db-wal
+*.db-shm

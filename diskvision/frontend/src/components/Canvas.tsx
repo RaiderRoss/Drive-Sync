@@ -8,8 +8,6 @@ import type {
 import { Button, Slider, Tooltip } from "antd";
 import { AimOutlined, ArrowUpOutlined, ZoomInOutlined, ZoomOutOutlined } from "@ant-design/icons";
 
-/* ───────────────────────────── Types ───────────────────────────── */
-
 export type NodeKind = "directory" | "file" | "cluster";
 
 export interface FsNode {
@@ -19,7 +17,16 @@ export interface FsNode {
   size: number;
   modified?: string;
   extension?: string;
+
   children?: FsNode[];
+
+  childCount?: number;
+
+  count?: number;
+}
+
+export function itemCount(node: FsNode): number {
+  return node.childCount ?? node.children?.length ?? 0;
 }
 
 type Category = "directory" | "archive" | "media" | "document" | "code" | "system" | "cluster";
@@ -35,46 +42,41 @@ interface View {
   y: number;
 }
 
-/**
- * One tile in the scene. Every tile is a rectangle whose long side (`w`) lies along the link to its
- * parent; it gets longer as the item gets bigger, and is always thick enough to hold its label.
- * Nodes are stored depth-first, so a node's descendants directly follow it.
- */
 interface PositionedNode {
   node: FsNode;
-  /** Index of the parent in `Scene.nodes`, or -1 when the parent is the focal node. */
+
   parent: number;
   depth: number;
-  /** Position among its siblings (largest first); drives the staggered entrance. */
+
   order: number;
-  /** Angular room this node was given on its ring (radians). */
+
   span: number;
-  /** Tile centre, in scene units. */
+
   x: number;
   y: number;
-  /** Length along the link direction. */
+
   w: number;
-  /** Thickness across it. */
+
   h: number;
-  /** Direction of the link from the parent (radians). The tile's long side follows it. */
+
   angle: number;
   category: Category;
   color: string;
-  /** Fraction of the parent's size, 0–1. */
+
   share: number;
 }
 
 interface Scene {
   focus: FsNode;
   nodes: PositionedNode[];
-  /** Width of the focal box; grows with the folder name. */
+
   focusW: number;
-  /** Extent of everything drawn, in scene units, used to fit the view to the panel. */
+
   bounds: { minX: number; maxX: number; minY: number; maxY: number };
   depthReached: number;
-  /** The depth limit this scene was built with. */
+
   maxDepth: number;
-  /** Ring radius per depth for this scene: the defaults, pushed outward where a ring is crowded. */
+
   radii: number[];
   byId: Map<string, number>;
 }
@@ -82,37 +84,27 @@ interface Scene {
 interface HoverInfo {
   node: FsNode;
   color: string;
-  /** Fraction of the parent's size; null for the focal folder. */
+
   share: number | null;
   isFocus: boolean;
 }
-
-/* ─────────────────────────── Constants ─────────────────────────── */
 
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 8;
 const TAU = Math.PI * 2;
 
-/** Levels of descendants the depth slider offers, and the level shown at first. */
 const DEPTH_LIMIT = 12;
-const DEFAULT_DEPTH = 4;
+export const DEFAULT_DEPTH = 4;
 
-/*
- * Layout tables, indexed by depth (index 0 is unused). They are written out for the first six rings;
- * deeper rings reuse the last entry, and each extra ring sits RING_STEP further out. The deepest level
- * that gets drawn is chosen by the `depth` prop, so this file has no depth limit of its own.
- */
 const perDepth = (values: readonly number[]) => (depth: number) => values[Math.min(depth, values.length - 1)];
 
-/** Visible children per level. The rest collapse into one "+N more" tile. */
 const childLimit = perDepth([0, 48, 8, 5, 4, 3, 2]);
-/** Tile length (along its link) for the smallest and largest item on each ring. */
+
 const tileLengthMin = perDepth([0, 70, 62, 54, 48, 44, 40]);
 const tileLengthMax = perDepth([0, 118, 100, 88, 78, 70, 64]);
-/** Tile thickness: enough for a name line and a size line. */
+
 const tileThickness = perDepth([0, 44, 38, 34, 30, 28, 26]);
 
-/** Ring radius per level. Wide enough that tiles never touch across rings. */
 const RING_RADII = [0, 156, 284, 404, 514, 618, 716];
 const RING_STEP = 98;
 const ringRadius = (depth: number) =>
@@ -121,15 +113,14 @@ const ringRadius = (depth: number) =>
     : RING_RADII[RING_RADII.length - 1] + (depth - (RING_RADII.length - 1)) * RING_STEP;
 
 const FOCUS_H = 54;
-/** Fit margin around the scene (px) and the allowed auto-fit scale range. */
+
 const FIT_MARGIN = 40;
 const MIN_FIT = 0.05;
 const MAX_FIT = 1.8;
 const GRID_SIZE = 28;
-/** How much of the scene must stay on screen when panning (px). */
+
 const KEEP_VISIBLE = 120;
 
-/* Animation timings (ms). */
 const ENTER_MS = 640;
 const ENTER_STAGGER_DEPTH = 130;
 const ENTER_STAGGER_SIBLING = 24;
@@ -159,8 +150,6 @@ const easeOutBack = (t: number) => {
   return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2;
 };
 
-/* ───────────────────────── Formatting & colours ───────────────────────── */
-
 export function formatBytes(bytes: number): string {
   if (bytes >= TB) return `${(bytes / TB).toFixed(2)} TB`;
   if (bytes >= GB) return `${(bytes / GB).toFixed(1)} GB`;
@@ -175,7 +164,6 @@ function formatPercent(fraction: number): string {
   return "<0.1%";
 }
 
-/** Mid-tone colours that read well on the dark canvas. */
 const PALETTE: Record<Category, string> = {
   directory: "#f59e0b",
   archive: "#ec4899",
@@ -185,7 +173,6 @@ const PALETTE: Record<Category, string> = {
   system: "#94a3b8",
   cluster: "#94a3b8",
 };
-
 
 const ARCHIVE_EXTENSIONS = new Set(["zip", "tar", "iso", "cab", "pack", "pak", "bundle"]);
 const MEDIA_EXTENSIONS = new Set(["mp4", "mkv", "mov", "mp3"]);
@@ -207,7 +194,6 @@ export function colorFor(node: FsNode): string {
   return PALETTE[categoryOf(node)];
 }
 
-/** Parses #rgb, #rrggbb and rgb()/rgba(); null for anything else. */
 function parseColor(color: string): { r: number; g: number; b: number } | null {
   const text = color.trim();
   const hexMatch = text.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
@@ -222,13 +208,11 @@ function parseColor(color: string): { r: number; g: number; b: number } | null {
   return null;
 }
 
-/** `color` as rgba() at `alpha`; unparseable colours are returned unchanged. */
 function withAlpha(color: string, alpha: number): string {
   const c = parseColor(color);
   return c ? `rgba(${Math.round(c.r)}, ${Math.round(c.g)}, ${Math.round(c.b)}, ${clamp01(alpha)})` : color;
 }
 
-/** Linear mix, amount 0 → a, 1 → b; unparseable input returns `a`. */
 function mixColors(a: string, b: string, amount: number): string {
   const ca = parseColor(a);
   const cb = parseColor(b);
@@ -240,13 +224,12 @@ function mixColors(a: string, b: string, amount: number): string {
 function describeNode(node: FsNode, isFocus: boolean): string {
   if (node.kind === "cluster") return "Smaller items grouped together";
   if (node.kind === "directory") {
-    const count = node.children?.length ?? 0;
+    const count = itemCount(node);
     return `${isFocus ? "Current folder" : "Folder"} · ${count} ${count === 1 ? "item" : "items"}`;
   }
   return node.extension ? `${node.extension.toUpperCase()} file` : "File";
 }
 
-/** Path for a rounded rectangle (starts its own path). */
 function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
   const rr = Math.max(0, Math.min(r, w / 2, h / 2));
   ctx.beginPath();
@@ -257,8 +240,6 @@ function roundedRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: num
   ctx.arcTo(x, y, x + w, y, rr);
   ctx.closePath();
 }
-
-/* ─────────────────────────── Canvas theme ─────────────────────────── */
 
 interface CanvasTheme {
   fontFamily: string;
@@ -308,140 +289,83 @@ function readTheme(element: HTMLElement): CanvasTheme {
   };
 }
 
-/* ─────────────────────────── Orbital layout ─────────────────────────── */
-
-/** How much angular room a family's fan gets relative to what its tiles strictly need. */
-const FAN_SPREAD = 1.8;
-/** Gap between neighbouring tiles on a ring, as a multiple of tile thickness. */
 const TILE_SLOT = 1.35;
 
-interface LayoutPlan {
-  entry: FsNode;
-  children: LayoutPlan[];
-  /** Smallest angle (radians) this subtree can live in without its tiles overlapping. */
-  need: number;
-}
+const RING_FILL = 0.9;
+const RING_FILL_FIRST = 0.6;
 
-/**
- * Lays the focal node's descendants out on concentric rings, up to `maxDepth` levels.
- *
- * - Position: every family fans out centred on its parent, in a wedge sized by what the whole
- *   subtree needs (never more than the parent's own slice), so a lone chain runs straight outward
- *   and branches never wrap around to the far side of the view.
- * - Rings: when the tree can't fit around the circle at full tile size, every ring moves outward
- *   by the same amount (keeping their spacing) until it just fits, so nothing has to overlap.
- * - Tile area: proportional to size, relative to the largest tile on the same ring.
- *   Tiles are shrunk if they would otherwise run into their neighbours.
- * - Tile direction: every tile points outward from the centre; links curve to meet it.
- */
+const RING_GROWTH = 1.12;
+const SPAN_POWER = 0.85;
+
 function createOrbitalScene(focus: FsNode, maxDepth: number): Scene {
   const nodes: PositionedNode[] = [];
+  const slot = (depth: number) => tileThickness(depth) * TILE_SLOT;
 
-  // Pass 1: decide what is shown (big items first, the tail folded into "+N more").
-  const plan = (parent: FsNode, depth: number): LayoutPlan[] => {
-    if (!parent.children?.length) return [];
-    const sorted = [...parent.children].sort((a, b) => b.size - a.size);
+  const family = (parent: FsNode, depth: number) => {
+    const children = parent.children ?? [];
+
+    const given = children.filter(child => child.kind === "cluster");
+    const sorted = children.filter(child => child.kind !== "cluster").sort((a, b) => b.size - a.size);
     const limit = childLimit(depth);
-    const entries: FsNode[] = sorted.slice(0, limit);
-    const rest = sorted.slice(limit);
-    if (rest.length > 0) {
-      entries.push({
+    return { shown: sorted.slice(0, limit), tail: [...sorted.slice(limit), ...given] };
+  };
+
+  const withCluster = (parent: FsNode, shown: FsNode[], rest: FsNode[]): FsNode[] => {
+    if (rest.length === 0) return shown;
+    const count = rest.reduce((sum, item) => sum + (item.kind === "cluster" ? (item.count ?? 1) : 1), 0);
+    return [
+      ...shown,
+      {
         id: `${parent.id}-more`,
-        name: `+${rest.length} more`,
+        name: `+${count} more`,
         kind: "cluster",
         size: rest.reduce((sum, item) => sum + item.size, 0),
-      });
-    }
-    return entries.map(entry => ({
-      entry,
-      children: entry.kind === "directory" && depth < maxDepth ? plan(entry, depth + 1) : [],
-      need: 0,
-    }));
+        count,
+      },
+    ];
   };
-  const top = plan(focus, 1);
 
-  // How much angle each subtree needs: its own tile, or everything beneath it, whichever is more.
-  let radii: number[] = [];
-  const radiusAt = (depth: number) => radii[Math.min(depth, radii.length - 1)];
-  const measure = (plans: LayoutPlan[], depth: number): number => {
-    let total = 0;
-    for (const item of plans) {
-      const below = measure(item.children, depth + 1);
-      const own = (tileThickness(depth) * TILE_SLOT) / radiusAt(depth);
-      item.need = Math.max(own, below);
-      total += item.need;
-    }
-    return total;
-  };
-  const ringsWith = (offset: number) =>
-    Array.from({ length: maxDepth + 2 }, (_, depth) => (depth === 0 ? 0 : ringRadius(depth) + offset));
-
-  // Ring radii: the defaults, unless the whole tree can't fit around the circle. Then every ring
-  // moves out by the same amount (keeping their even spacing) until it just fits.
-  const FIT_ANGLE = TAU * 0.92;
-  radii = ringsWith(0);
-  if (measure(top, 1) > FIT_ANGLE) {
-    let lo = 0;
-    let hi = 200;
-    radii = ringsWith(hi);
-    while (measure(top, 1) > FIT_ANGLE && hi < 1e5) {
-      lo = hi;
-      hi *= 2;
-      radii = ringsWith(hi);
-    }
-    for (let step = 0; step < 24; step++) {
-      const mid = (lo + hi) / 2;
-      radii = ringsWith(mid);
-      if (measure(top, 1) > FIT_ANGLE) lo = mid;
-      else hi = mid;
-    }
-    radii = ringsWith(hi);
-    measure(top, 1);
+  const first = family(focus, 1);
+  const firstCount = first.shown.length + (first.tail.length > 0 ? 1 : 0);
+  const radii = [0, Math.max(ringRadius(1), (firstCount * slot(1)) / (TAU * RING_FILL_FIRST))];
+  for (let depth = 2; depth <= maxDepth + 1; depth++) {
+    radii[depth] = radii[depth - 1] + (ringRadius(depth) - ringRadius(depth - 1)) * RING_GROWTH ** (depth - 2);
   }
+  const radiusAt = (depth: number) => radii[Math.min(depth, radii.length - 1)];
 
-  // Pass 2: hand out angles.
-  const place = (
-    parent: FsNode,
-    plans: LayoutPlan[],
-    parentIndex: number,
-    depth: number,
-    from: number,
-    to: number,
-    center: number,
-  ) => {
-    if (plans.length === 0) return;
-    const entries = plans.map(item => item.entry);
+  const place = (parent: FsNode, parentIndex: number, depth: number, from: number, to: number) => {
+    if (depth > maxDepth || parent.kind !== "directory" || !parent.children?.length) return;
 
-    // The fan: as wide as the subtree wants, centred on the parent, but inside the parent's slice.
-    const needSum = plans.reduce((sum, item) => sum + item.need, 0);
-    const available = to - from;
-    const width = parentIndex < 0 ? available : Math.min(available, needSum * FAN_SPREAD);
-    const lo = Math.min(Math.max(center - width / 2, from), to - width);
+    const wedge = to - from;
+    const minSpan = slot(depth) / radiusAt(depth);
+    const fill = depth === 1 ? RING_FILL_FIRST : RING_FILL;
+    const fits = Math.floor((wedge * fill) / minSpan);
+    if (fits < 1) return;
 
-    // Every child first gets the room its subtree needs (so crowded families never get squeezed into
-    // overlapping), then whatever is left over is shared by need, size (√) and evenly.
-    const roots = entries.map(entry => Math.sqrt(Math.max(entry.size, 1)));
-    const maxShownRoot = Math.max(1, ...roots.filter((_, i) => entries[i].kind !== "cluster"));
-    const capped = roots.map((root, i) => (entries[i].kind === "cluster" ? Math.min(root, maxShownRoot) : root));
-    const rootSum = capped.reduce((sum, value) => sum + value, 0);
-    const squeeze = Math.min(1, width / needSum);
-    const spare = Math.max(0, width - needSum);
-    const spans = plans.map(
-      (item, i) =>
-        item.need * squeeze +
-        spare * (0.45 * (item.need / needSum) + 0.35 * (capped[i] / rootSum) + 0.2 / plans.length),
-    );
+    const { shown, tail } = family(parent, depth);
+    let entries: FsNode[];
+    if (shown.length + (tail.length > 0 ? 1 : 0) <= fits) {
+      entries = withCluster(parent, shown, tail);
+    } else if (fits === 1) {
+      entries = shown[0].size >= parent.size * 0.5 ? [shown[0]] : withCluster(parent, [], [...shown, ...tail]);
+    } else {
+      entries = withCluster(parent, shown.slice(0, fits - 1), [...shown.slice(fits - 1), ...tail]);
+    }
 
-    let cursor = lo;
-    plans.forEach((item, i) => {
-      const entry = item.entry;
-      const span = spans[i];
+    const weights = entries.map(entry => Math.pow(Math.max(entry.size, 1), SPAN_POWER));
+    const maxReal = Math.max(1, ...weights.filter((_, i) => entries[i].kind !== "cluster"));
+    const capped = weights.map((w, i) => (entries[i].kind === "cluster" ? Math.min(w, maxReal) : w));
+    const weightSum = capped.reduce((sum, w) => sum + w, 0);
+    const spare = Math.max(0, wedge - entries.length * minSpan);
+    const squeeze = Math.min(1, wedge / (entries.length * minSpan));
+
+    let cursor = from;
+    entries.forEach((entry, i) => {
+      const span = minSpan * squeeze + (spare * capped[i]) / weightSum;
       const start = cursor;
       cursor += span;
 
       const angle = start + span / 2;
-      const x = Math.cos(angle) * radiusAt(depth);
-      const y = Math.sin(angle) * radiusAt(depth);
       const index = nodes.length;
       nodes.push({
         node: entry,
@@ -449,9 +373,9 @@ function createOrbitalScene(focus: FsNode, maxDepth: number): Scene {
         depth,
         order: i,
         span,
-        x,
-        y,
-        w: 0, // filled in once every ring's maximum is known
+        x: Math.cos(angle) * radiusAt(depth),
+        y: Math.sin(angle) * radiusAt(depth),
+        w: 0,
         h: 0,
         angle,
         category: categoryOf(entry),
@@ -459,13 +383,12 @@ function createOrbitalScene(focus: FsNode, maxDepth: number): Scene {
         share: parent.size > 0 ? Math.min(1, entry.size / parent.size) : 0,
       });
 
-      place(entry, item.children, index, depth + 1, start + span * 0.02, start + span * 0.98, angle);
+      place(entry, index, depth + 1, start + span * 0.03, start + span * 0.97);
     });
   };
 
-  place(focus, top, -1, 1, -Math.PI / 2, Math.PI * 1.5, Math.PI / 2);
+  place(focus, -1, 1, -Math.PI / 2, Math.PI * 1.5);
 
-  // Tile length grows with size (√ so huge items don't dwarf everything); thickness is fixed so text fits.
   const ringMax = new Array<number>(maxDepth + 1).fill(0);
   let depthReached = 0;
   for (const item of nodes) {
@@ -480,8 +403,6 @@ function createOrbitalScene(focus: FsNode, maxDepth: number): Scene {
     let w = tileLengthMin(item.depth) + (tileLengthMax(item.depth) - tileLengthMin(item.depth)) * fraction;
     let h = tileThickness(item.depth);
 
-    // Keep the tile inside its own slice of the ring so neighbours never overlap.
-    // The tile is rotated by `angle`, so measure how far it reaches along the ring's tangent.
     const ringAngle = Math.atan2(item.y, item.x);
     const turn = item.angle - ringAngle;
     const extent = w * Math.abs(Math.sin(turn)) + h * Math.abs(Math.cos(turn));
@@ -516,8 +437,6 @@ function createOrbitalScene(focus: FsNode, maxDepth: number): Scene {
   return { focus, nodes, focusW, bounds, depthReached, maxDepth, radii, byId };
 }
 
-/* ───────────────────────────── Renderer ───────────────────────────── */
-
 interface RendererHandlers {
   onHover?: (info: HoverInfo | null) => void;
   onZoom?: (zoom: number) => void;
@@ -531,12 +450,6 @@ interface Ripple {
   start: number;
 }
 
-/**
- * Owns everything that moves: the camera (eased towards a goal, with inertia), the entrance of the
- * tiles, hover highlighting, and the ambient effects. React only feeds it a scene, pointer
- * positions and a few flags; it runs its own animation loop and only paints when something changed
- * (or, at a relaxed 25 fps, for the ambient glow).
- */
 class CanvasRenderer {
   handlers: RendererHandlers = {};
 
@@ -545,32 +458,28 @@ class CanvasRenderer {
   private theme: CanvasTheme;
   private scene: Scene | null = null;
 
-  /* Timeline */
   private sceneStart = -1e9;
   private ripples: Ripple[] = [];
   private enterEnd = 0;
   private elapsed = 1e9;
   private focusEnter = 1;
 
-  /* Camera: `cur` is what is drawn, `goal` is where it is heading. */
   private cur: View = { zoom: 1, x: 0, y: 0 };
   private goal: View = { zoom: 1, x: 0, y: 0 };
   private velocity: Point = { x: 0, y: 0 };
   private fit = 1;
   private dpr = 1;
-  /** Canvas size in CSS pixels. */
+
   private width = 0;
   private height = 0;
 
-  /* Interaction state */
   private hover = NONE;
   private selected = NONE;
   private selectedId: string | null = null;
   private pointer: Point | null = null;
-  /** Hovered node, its ancestors and its descendants; everything else is dimmed. */
+
   private active: Set<number> | null = null;
 
-  /* Per-frame state, one entry per node. */
   private rx = new Float32Array(0);
   private ry = new Float32Array(0);
   private rs = new Float32Array(0);
@@ -579,7 +488,6 @@ class CanvasRenderer {
   private fade = new Float32Array(0);
   private focusLift = 0;
 
-  /* Loop */
   private raf = 0;
   private lastNow = 0;
   private lastDraw = 0;
@@ -592,7 +500,6 @@ class CanvasRenderer {
   private widthCache = new Map<string, number>();
   private textCache = new Map<string, string>();
 
-  /* Backdrop pieces that only change with the panel size or theme, painted once and reused every frame. */
   private bgKey = "";
   private bgBase: HTMLCanvasElement | null = null;
   private bgVignette: HTMLCanvasElement | null = null;
@@ -623,9 +530,6 @@ class CanvasRenderer {
     this.dirty = true;
   };
 
-  /* ───────── Scene & state setters ───────── */
-
-  /** Swaps the scene. The entrance replays when the focal folder or the depth limit changed. */
   setScene(scene: Scene) {
     const replay =
       !this.scene || this.scene.focus.id !== scene.focus.id || this.scene.maxDepth !== scene.maxDepth;
@@ -691,13 +595,10 @@ class CanvasRenderer {
     return index === undefined ? null : scene.nodes[index].node;
   }
 
-  /* ───────── Camera ───────── */
-
   getZoom() {
     return this.goal.zoom;
   }
 
-  /** Zooms by `factor`, keeping the point under `anchor` (px from the panel centre) fixed. */
   zoomAt(factor: number, anchor: Point = { x: 0, y: 0 }, instant = false) {
     const next = clampZoom(this.goal.zoom * factor);
     if (next === this.goal.zoom) return;
@@ -710,7 +611,6 @@ class CanvasRenderer {
     this.dirty = true;
   }
 
-  /** Moves the view by screen pixels. Dragging passes `instant` so the scene sticks to the pointer. */
   panBy(dx: number, dy: number, instant = true) {
     const pan = this.clampPan(this.goal.zoom, this.goal.x + dx, this.goal.y + dy);
     this.goal.x = pan.x;
@@ -723,7 +623,6 @@ class CanvasRenderer {
     this.dirty = true;
   }
 
-  /** Back to the fitted view; glides there unless `instant`. */
   resetView(instant = false) {
     this.goal = { zoom: 1, x: 0, y: 0 };
     this.velocity = { x: 0, y: 0 };
@@ -732,7 +631,6 @@ class CanvasRenderer {
     this.dirty = true;
   }
 
-  /** Lets go of a drag with momentum (px per ms). */
   fling(vx: number, vy: number) {
     if (this.reduced || Math.hypot(vx, vy) < 0.05) return;
     this.velocity = { x: clamp(vx, -3, 3), y: clamp(vy, -3, 3) };
@@ -755,11 +653,10 @@ class CanvasRenderer {
       (this.height - FIT_MARGIN * 2) / (maxY - minY),
     );
     this.fit = clamp(Number.isFinite(fit) ? fit : 1, MIN_FIT, MAX_FIT);
-    // A folder with nothing in it shouldn't blow its lone box up to fill the panel.
+
     if (scene.nodes.length === 0) this.fit = Math.min(this.fit, 1.1);
   }
 
-  /** Keeps a good part of the scene on screen so it can't be dragged out of sight. */
   private clampPan(zoom: number, x: number, y: number): Point {
     const scene = this.scene;
     if (!scene) return { x, y };
@@ -776,20 +673,16 @@ class CanvasRenderer {
     this.goal.y = pan.y;
   }
 
-  /** Scene units → CSS pixels. The scene is auto-fitted to the panel, then scaled by the user's zoom. */
   private viewScale(): number {
     return this.fit * this.cur.zoom;
   }
 
-  /** Where the scene's centre point lands on screen (CSS px): the fitted scene is centred in the panel, then panned. */
   private origin(scale: number): Point {
     const b = this.scene?.bounds;
     const midX = b ? (b.minX + b.maxX) / 2 : 0;
     const midY = b ? (b.minY + b.maxY) / 2 : 0;
     return { x: this.width / 2 + this.cur.x - midX * scale, y: this.height / 2 + this.cur.y - midY * scale };
   }
-
-  /* ───────── Hit testing & hover ───────── */
 
   private pick(clientX: number, clientY: number): number {
     const scene = this.scene;
@@ -805,7 +698,7 @@ class CanvasRenderer {
       const grow = this.rs[i];
       if (grow < 0.3 || this.ra[i] < 0.3) continue;
       const item = scene.nodes[i];
-      // Move into the tile's own (rotated) frame.
+
       const dx = x - this.rx[i];
       const dy = y - this.ry[i];
       const cos = Math.cos(item.angle);
@@ -819,7 +712,6 @@ class CanvasRenderer {
     return NONE;
   }
 
-  /** The node under the pointer, if any. */
   hitTest(clientX: number, clientY: number): FsNode | null {
     const scene = this.scene;
     if (!scene) return null;
@@ -828,7 +720,6 @@ class CanvasRenderer {
     return index >= 0 ? scene.nodes[index].node : null;
   }
 
-  /** Like `hitTest`, plus a ripple on the tile that was hit. */
   activateAt(clientX: number, clientY: number): FsNode | null {
     const scene = this.scene;
     if (!scene) return null;
@@ -849,7 +740,6 @@ class CanvasRenderer {
     this.dirty = true;
   }
 
-  /** Updates hover highlighting. Returns true when something is under the pointer. */
   hoverAt(clientX: number, clientY: number): boolean {
     this.pointer = { x: clientX, y: clientY };
     this.updateHover();
@@ -892,13 +782,10 @@ class CanvasRenderer {
     return null;
   }
 
-  /* ───────── Animation loop ───────── */
-
   private delayOf(item: PositionedNode) {
     return (item.depth - 1) * ENTER_STAGGER_DEPTH + Math.min(ENTER_STAGGER_CAP, item.order * ENTER_STAGGER_SIBLING);
   }
 
-  /** Where every tile is right now: flying out from its parent, scaling up with a little overshoot. */
   private layout(now: number) {
     const scene = this.scene;
     if (!scene) return;
@@ -930,7 +817,6 @@ class CanvasRenderer {
     this.lastNow = now;
     let busy = this.dirty;
 
-    // Theme (and pixel ratio) can change while the app is open, so re-read them now and then.
     if (now - this.lastTheme > 1200) {
       this.lastTheme = now;
       this.theme = readTheme(this.canvas);
@@ -938,7 +824,6 @@ class CanvasRenderer {
       busy = true;
     }
 
-    // Momentum after a drag.
     if (this.velocity.x !== 0 || this.velocity.y !== 0) {
       const next = this.clampPan(this.goal.zoom, this.goal.x + this.velocity.x * dt, this.goal.y + this.velocity.y * dt);
       if (next.x === this.goal.x) this.velocity.x = 0;
@@ -954,7 +839,6 @@ class CanvasRenderer {
       busy = true;
     }
 
-    // Ease the camera towards its goal. Zoom and pan share one factor, so a zoom keeps its anchor fixed throughout.
     const f = this.reduced ? 1 : 1 - Math.exp(-dt / VIEW_TAU);
     const dz = this.goal.zoom - this.cur.zoom;
     const dx = this.goal.x - this.cur.x;
@@ -975,9 +859,8 @@ class CanvasRenderer {
     this.layout(now);
     const entering = !this.reduced && this.elapsed < this.enterEnd;
     if (entering) busy = true;
-    if (this.pointer && (viewMoving || entering)) this.updateHover(); // things moved under a still pointer
+    if (this.pointer && (viewMoving || entering)) this.updateHover();
 
-    // Hover highlighting fades rather than snaps.
     const kh = this.reduced ? 1 : 1 - Math.exp(-dt / HOVER_TAU);
     const nodes = scene.nodes;
     for (let i = 0; i < nodes.length; i++) {
@@ -1001,12 +884,10 @@ class CanvasRenderer {
 
     if (this.ripples.length > 0) busy = true;
 
-    if (!busy && this.reduced) return; // nothing is moving and nothing needs the ambient glow
-    if (!busy && now - this.lastDraw < 40) return; // ambient effects only: ~25 fps is plenty
+    if (!busy && this.reduced) return;
+    if (!busy && now - this.lastDraw < 40) return;
     this.draw(now);
   };
-
-  /* ───────── Drawing ───────── */
 
   private draw(now: number) {
     const scene = this.scene;
@@ -1030,7 +911,7 @@ class CanvasRenderer {
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
-    const px = 1 / scale; // one screen pixel, in scene units
+    const px = 1 / scale;
     this.drawRings(scene, px, now);
     this.drawLinks(scene, px, now);
     this.drawFocus(scene, px, now);
@@ -1038,7 +919,6 @@ class CanvasRenderer {
     this.drawRipples(px, now);
     ctx.restore();
 
-    // Text is drawn in screen space so it stays crisp and readable at any zoom.
     this.drawLabels(scene, cx, cy, scale, width, height);
   }
 
@@ -1069,7 +949,7 @@ class CanvasRenderer {
 
     this.bgBase = layer((g, r) => {
       radial(g, r, 0, theme.backgroundCenter, theme.backgroundEdge);
-      // A whisper of noise breaks up the banding that smooth dark gradients show on 8-bit screens.
+
       const noise = document.createElement("canvas");
       noise.width = noise.height = 128;
       const n = noise.getContext("2d");
@@ -1086,7 +966,7 @@ class CanvasRenderer {
         g.fillRect(0, 0, width, height);
       }
     });
-    // Fades the dot grid out towards the edges.
+
     this.bgVignette = layer((g, r) =>
       radial(g, r, r * 0.25, withAlpha(theme.backgroundEdge, 0), withAlpha(theme.backgroundEdge, 0.94)));
 
@@ -1106,7 +986,6 @@ class CanvasRenderer {
     this.ensureBackground();
     if (this.bgBase) ctx.drawImage(this.bgBase, 0, 0, width, height);
 
-    // The dot grid follows the pan.
     if (this.bgDots) {
       this.bgDots.setTransform(new DOMMatrix([1 / dpr, 0, 0, 1 / dpr, (cx - GRID_SIZE / 2) % GRID_SIZE, (cy - GRID_SIZE / 2) % GRID_SIZE]));
       ctx.fillStyle = this.bgDots;
@@ -1123,7 +1002,7 @@ class CanvasRenderer {
     for (let depth = 1; depth <= scene.depthReached; depth++) {
       const t = easeOutCubic(clamp01((this.elapsed - (depth - 1) * ENTER_STAGGER_DEPTH) / 620));
       if (t <= 0.01) continue;
-      // Rings drift slowly, in alternating directions.
+
       ctx.lineDashOffset = this.reduced ? 0 : (depth % 2 ? -1 : 1) * now * 0.006 * px;
       ctx.globalAlpha = t;
       ctx.beginPath();
@@ -1135,12 +1014,10 @@ class CanvasRenderer {
     ctx.setLineDash([]);
   }
 
-  /** Thin lines from each tile back to its parent; the hovered branch lights up and flows outwards. */
   private drawLinks(scene: Scene, px: number, now: number) {
     const { ctx, theme } = this;
     const nodes = scene.nodes;
-    // Each link leaves its parent heading outward and arrives at its child heading outward,
-    // so a family reads as branches growing from one stem.
+
     const line = (i: number) => {
       const p = nodes[i].parent;
       const x0 = p >= 0 ? this.rx[p] : 0;
@@ -1198,7 +1075,6 @@ class CanvasRenderer {
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // Halo behind the box.
     const haloR = scene.focusW * 0.85 + breathe * 10 + lift * 8;
     const halo = ctx.createRadialGradient(0, 0, hh * 0.6, 0, 0, haloR);
     halo.addColorStop(0, withAlpha(theme.accent, 0.3 + 0.12 * lift));
@@ -1210,7 +1086,6 @@ class CanvasRenderer {
 
     ctx.scale(s, s);
 
-    // Box with a breathing glow (stacked wide strokes underneath: much cheaper than a blur).
     roundedRect(ctx, -hw, -hh, hw * 2, hh * 2, 10 * u);
     const glow = 0.5 + 0.35 * breathe + 0.4 * lift;
     for (const [width, strength] of [[16, 0.06], [10, 0.1], [5, 0.18]] as const) {
@@ -1230,7 +1105,6 @@ class CanvasRenderer {
     ctx.lineWidth = (2 + lift) * u;
     ctx.stroke();
 
-    // Glass highlight.
     ctx.beginPath();
     ctx.moveTo(-hw + 10 * u, -hh + 1.6 * u);
     ctx.lineTo(hw - 10 * u, -hh + 1.6 * u);
@@ -1251,7 +1125,6 @@ class CanvasRenderer {
   }
 
   private drawTiles(scene: Scene, px: number, scale: number, now: number) {
-    // The hovered tile goes last so a neighbour can never cover it.
     for (let i = 0; i < scene.nodes.length; i++) {
       if (i !== this.hover) this.drawTile(scene, i, px, scale, now);
     }
@@ -1268,9 +1141,9 @@ class CanvasRenderer {
 
     const lift = this.lift[index];
     const s = grow * (1 + HOVER_LIFT * lift);
-    const u = px / s; // one screen pixel in the tile's own (scaled) units
+    const u = px / s;
     const { w, h, color, node } = item;
-    // Same flip as the label, so light always falls from the top of the text.
+
     const turn = item.angle + (Math.cos(item.angle) < 0 ? Math.PI : 0);
 
     ctx.save();
@@ -1281,7 +1154,6 @@ class CanvasRenderer {
 
     roundedRect(ctx, -w / 2, -h / 2, w, h, 6 * u);
 
-    // Glow when hovered: wide translucent strokes that the base then covers.
     if (lift > 0.02) {
       for (const [width, strength] of [[16, 0.07], [10, 0.12], [5, 0.2]] as const) {
         ctx.strokeStyle = withAlpha(color, strength * lift * 1.4);
@@ -1290,18 +1162,14 @@ class CanvasRenderer {
       }
     }
 
-    // The body stays opaque while the tile is dimmed, so links passing underneath never show through it.
     ctx.globalAlpha = this.ra[index];
     ctx.fillStyle = theme.tileBase;
     ctx.fill();
     ctx.globalAlpha = alpha;
 
-    // A faint tint for the whole tile: the "empty" part of the gauge.
     ctx.fillStyle = withAlpha(color, 0.1 + 0.14 * lift);
     ctx.fill();
 
-    // Gauge: the tile fills up by its share of the parent, starting from the end nearest the parent,
-    // so relative sizes read at a glance at any zoom.
     if (item.share > 0) {
       const dir = turn !== item.angle ? -1 : 1;
       const filled = Math.max(2.5 * u, w * item.share);
@@ -1326,7 +1194,6 @@ class CanvasRenderer {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Folders get a second, inset outline so they read as containers.
     const inset = 3.5 * u;
     if (node.kind === "directory" && Math.min(w, h) > inset * 3) {
       roundedRect(ctx, -w / 2 + inset, -h / 2 + inset, w - inset * 2, h - inset * 2, 3 * u);
@@ -1335,7 +1202,6 @@ class CanvasRenderer {
       ctx.stroke();
     }
 
-    // Glass highlight along the top edge.
     if (h * s * scale >= 14) {
       const edge = Math.min(8 * u, w / 4);
       ctx.beginPath();
@@ -1358,7 +1224,6 @@ class CanvasRenderer {
     ctx.restore();
   }
 
-  /** Expanding rings where a tile was clicked. */
   private drawRipples(px: number, now: number) {
     const { ctx } = this;
     this.ripples = this.ripples.filter(ripple => now - ripple.start < 760);
@@ -1386,7 +1251,6 @@ class CanvasRenderer {
     return width;
   }
 
-  /** `text` shortened with "…" to fit `maxWidth`, in the current font; "" when even a stub won't fit. */
   private fitText(text: string, maxWidth: number): string {
     const limit = Math.floor(maxWidth / 2) * 2;
     const key = `${this.ctx.font}|${limit}|${text}`;
@@ -1407,22 +1271,15 @@ class CanvasRenderer {
     return result;
   }
 
-  /**
-   * Name and size inside each tile, drawn in screen space so the text stays crisp at any zoom.
-   * The text is sized to fill its tile (so it zooms with the tile and the full name always fits) and
-   * turned to follow it (flipped when it would be upside down). Text too small to read fades out
-   * rather than popping, and the tooltip covers it until you zoom in.
-   */
   private drawLabels(scene: Scene, cx: number, cy: number, scale: number, width: number, height: number) {
     const { ctx, theme } = this;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
 
-    // Text is measured once at a reference size and scaled, so the width cache stays small.
     const REF = 20;
     const nameRef = `500 ${REF}px ${theme.fontFamily}`;
     const subRef = `${REF}px ${theme.fontFamily}`;
-    const MIN_FONT = 4; // below this nothing is drawn; it fades in over the next couple of pixels
+    const MIN_FONT = 4;
     const halo = withAlpha(theme.tileBase, 0.85);
 
     const nodes = scene.nodes;
@@ -1439,17 +1296,16 @@ class CanvasRenderer {
       const reach = Math.max(length, thickness) / 2;
       if (x + reach < 0 || x - reach > width || y + reach < 0 || y - reach > height) continue;
 
-      const avail = length * 0.86; // a little breathing room at each end
+      const avail = length * 0.86;
       const sizeText = formatBytes(item.node.size);
       ctx.font = nameRef;
       const nameFit = (REF * avail) / Math.max(1, this.measure(item.node.name));
       ctx.font = subRef;
       const sizeFit = (REF * avail) / Math.max(1, this.measure(sizeText));
 
-      // One line (name only) or two (name + size): take whichever gives the name more room.
       const single = Math.min(nameFit, thickness * 0.6);
       const twoName = Math.min(nameFit, thickness * 0.4, sizeFit / 0.82);
-      const twoLines = twoName >= MIN_FONT + 1.5 || twoName >= single * 0.8; // show the size whenever it is readable
+      const twoLines = twoName >= MIN_FONT + 1.5 || twoName >= single * 0.8;
       const nameFont = Math.floor((twoLines ? twoName : single) * 4) / 4;
       if (nameFont < MIN_FONT) continue;
       alpha *= clamp01((nameFont - MIN_FONT) / 2);
@@ -1457,13 +1313,13 @@ class CanvasRenderer {
       const subFont = Math.floor(nameFont * 0.82 * 4) / 4;
 
       let turn = item.angle;
-      if (Math.cos(turn) < 0) turn += Math.PI; // keep the text right-way-up
+      if (Math.cos(turn) < 0) turn += Math.PI;
 
       ctx.save();
       ctx.globalAlpha = alpha;
       ctx.translate(x, y);
       ctx.rotate(turn);
-      // A soft halo keeps the text readable over the bright, filled part of the tile.
+
       ctx.shadowColor = halo;
       ctx.shadowBlur = Math.max(1.5, nameFont * 0.22);
       ctx.font = `500 ${nameFont}px ${theme.fontFamily}`;
@@ -1479,7 +1335,6 @@ class CanvasRenderer {
     }
     ctx.globalAlpha = 1;
 
-    // Focal node
     const fs = easeOutBack(this.focusEnter) * (1 + 0.045 * this.focusLift);
     const labelAlpha = clamp01((this.focusEnter - 0.4) / 0.6);
     if (labelAlpha <= 0.02) return;
@@ -1492,7 +1347,7 @@ class CanvasRenderer {
     ctx.fillStyle = theme.nodeLabel;
     ctx.fillText(name, cx, roomForSize ? cy - 8 : cy);
     if (roomForSize) {
-      const items = scene.focus.children?.length ?? 0;
+      const items = itemCount(scene.focus);
       ctx.font = `10.5px ${theme.fontFamily}`;
       ctx.fillStyle = theme.nodeSublabel;
       ctx.fillText(`${formatBytes(scene.focus.size)}${items ? ` · ${items} ${items === 1 ? "item" : "items"}` : ""}`, cx, cy + 10);
@@ -1500,8 +1355,6 @@ class CanvasRenderer {
     ctx.globalAlpha = 1;
   }
 }
-
-/* ───────────────────────────── Styles ───────────────────────────── */
 
 const STYLES = `
 .dv-root {
@@ -1531,7 +1384,6 @@ const STYLES = `
   box-shadow: 0 10px 28px rgba(0, 0, 0, .3), inset 0 1px 0 rgba(255, 255, 255, .06);
 }
 
-/* Hints */
 .dv-hint {
   position: absolute; left: 14px; bottom: 14px; display: flex; flex-wrap: wrap; gap: 6px;
   max-width: calc(100% - 200px); pointer-events: none; font-size: 11px;
@@ -1548,7 +1400,6 @@ const STYLES = `
 .dv-hint span:nth-child(3) { animation-delay: .86s; }
 .dv-hint b { color: var(--dv-text); font-weight: 600; }
 
-/* Controls */
 .dv-controls {
   position: absolute; right: 12px; bottom: 12px; display: flex; align-items: center; gap: 2px;
   padding: 4px; border-radius: 12px;
@@ -1557,7 +1408,6 @@ const STYLES = `
 .dv-zoomval { min-width: 46px; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dv-sub); user-select: none; }
 .dv-sep { width: 1px; height: 16px; margin: 0 3px; background: var(--dv-line); }
 
-/* Depth slider: sits just above the zoom controls */
 .dv-depthbar {
   position: absolute; right: 12px; bottom: 60px; display: flex; align-items: center; gap: 8px;
   padding: 6px 12px; border-radius: 12px;
@@ -1567,7 +1417,6 @@ const STYLES = `
 .dv-depthbar .ant-slider { width: 110px; margin: 0 4px; }
 .dv-depthbar__value { min-width: 12px; text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--dv-text); user-select: none; }
 
-/* Tooltip: positioned with a transform from JS, animated through its inner card */
 .dv-tip { position: absolute; left: 0; top: 0; z-index: 5; pointer-events: none; opacity: 0; transition: opacity .14s ease; will-change: transform; }
 .dv-tip--on { opacity: 1; }
 .dv-tip__card {
@@ -1591,7 +1440,6 @@ const STYLES = `
 .dv-tip__hint { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--dv-line); font-size: 10.5px; color: var(--dv-sub); }
 .dv-tip__hint b { color: var(--dv-text); font-weight: 600; }
 
-/* Empty folder */
 .dv-empty {
   position: absolute; left: 0; right: 0; top: calc(50% + 74px);
   text-align: center; pointer-events: none; animation: dv-in .6s cubic-bezier(.2, .8, .2, 1) .5s both;
@@ -1600,7 +1448,6 @@ const STYLES = `
 
 .dv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
-/* Narrow panels: hints get out of the way */
 .dv-root[data-compact] .dv-hint { display: none; }
 
 @keyframes dv-fade { from { opacity: 0; } to { opacity: 1; } }
@@ -1611,18 +1458,21 @@ const STYLES = `
 }
 `;
 
-/* ───────────────────────────── Component ───────────────────────────── */
-
 interface CanvasProps {
-  /** The directory shown in the middle; its descendants radiate from it. */
   focus: FsNode;
-  /** Single click on a node (or on the focal node). */
+
   onSelect: (node: FsNode) => void;
-  /** Double click on a directory. */
+
   onNavigate: (node: FsNode) => void;
-  /** Optional: adds an "up one level" button (and Backspace shortcut). */
+
   onNavigateUp?: () => void;
-  /** Optional: id of the selected node. Leave undefined to let the canvas track selection itself. */
+
+  depth?: number;
+
+  onDepthChange?: (depth: number) => void;
+
+  layoutDepth?: number;
+
   selectedId?: string | null;
   style?: CSSProperties;
 }
@@ -1636,7 +1486,17 @@ interface DragState {
   samples: Array<{ x: number; y: number; t: number }>;
 }
 
-export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, selectedId, style }: CanvasProps) {
+export default function Canvas({
+  focus,
+  onSelect,
+  onNavigate,
+  onNavigateUp,
+  depth: depthProp,
+  onDepthChange,
+  layoutDepth,
+  selectedId,
+  style,
+}: CanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const tipRef = useRef<HTMLDivElement | null>(null);
@@ -1658,15 +1518,22 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
   const [tipInfo, setTipInfo] = useState<HoverInfo | null>(null);
   const [tipVisible, setTipVisible] = useState(false);
   const [announcement, setAnnouncement] = useState("");
-  const [depth, setDepth] = useState(DEFAULT_DEPTH);
+  const [localDepth, setLocalDepth] = useState(DEFAULT_DEPTH);
+  const depth = depthProp ?? localDepth;
+  const setDepth = useCallback(
+    (value: number) => {
+      if (depthProp === undefined) setLocalDepth(value);
+      onDepthChange?.(value);
+    },
+    [depthProp, onDepthChange],
+  );
+  const shownDepth = Math.min(depth, layoutDepth ?? depth);
 
-  // The layout doesn't depend on the panel size; the renderer fits it to whatever space there is.
-  const scene = useMemo(() => createOrbitalScene(focus, depth), [focus, depth]);
+  const scene = useMemo(() => createOrbitalScene(focus, shownDepth), [focus, shownDepth]);
   const activeSelected = selectedId !== undefined ? selectedId : localSelected;
 
   const dismissHint = useCallback(() => setHintVisible(false), []);
 
-  // Renderer lifecycle: create it, follow the container size, and pause it while scrolled out of view.
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
@@ -1708,28 +1575,24 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
     rendererRef.current?.setScene(scene);
   }, [scene]);
 
-  // Re-centre whenever the focal directory changes; the tiles fly out again from the new centre.
   useEffect(() => {
     rendererRef.current?.resetView(true);
     setLocalSelected(null);
   }, [focus.id]);
 
-  // A different depth makes the scene bigger or smaller, so go back to the fitted view.
   useEffect(() => {
     rendererRef.current?.resetView(true);
-  }, [depth]);
+  }, [shownDepth]);
 
   useEffect(() => {
     rendererRef.current?.setSelected(activeSelected ?? null);
   }, [activeSelected]);
 
-  // The hint is only for first-timers: it fades after a while or as soon as they interact.
   useEffect(() => {
     const timer = window.setTimeout(() => setHintVisible(false), 16000);
     return () => window.clearTimeout(timer);
   }, []);
 
-  // React attaches wheel listeners as passive, so preventDefault (stop page scroll) needs a native one.
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -1739,7 +1602,7 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
       if (!renderer) return;
       const rect = canvas.getBoundingClientRect();
       let delta = event.deltaY;
-      if (event.deltaMode === 1) delta *= 16; // lines → px
+      if (event.deltaMode === 1) delta *= 16;
       else if (event.deltaMode === 2) delta *= rect.height;
       delta = clamp(delta, -240, 240);
       renderer.zoomAt(Math.exp(-delta * (event.ctrlKey ? 0.01 : 0.0015)), {
@@ -1752,7 +1615,6 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
     return () => canvas.removeEventListener("wheel", onWheel);
   }, []);
 
-  /** Puts the tooltip next to the pointer, flipping it when it would run off the panel. */
   const positionTip = useCallback(() => {
     const wrap = wrapRef.current;
     const tip = tipRef.current;
@@ -1769,7 +1631,6 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
     tip.style.transform = `translate3d(${Math.round(Math.max(8, x))}px, ${Math.round(Math.max(8, y))}px, 0)`;
   }, []);
 
-  // The card changes size with its content, so place it again after each change.
   useLayoutEffect(() => {
     positionTip();
   }, [tipInfo, positionTip]);
@@ -1780,7 +1641,6 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
     onSelect(node);
   };
 
-  /** Opens a folder. Guards against touch double-tap and `dblclick` both firing. */
   const open = (node: FsNode) => {
     if (node.kind !== "directory" || node.id === focus.id) return;
     const now = Date.now();
@@ -1807,7 +1667,6 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
         samples: [{ x: event.clientX, y: event.clientY, t: performance.now() }],
       };
     } else if (pointers.size === 2) {
-      // A second finger turns the gesture into a pinch.
       const [a, b] = [...pointers.values()];
       pinchRef.current = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       dragRef.current = null;
@@ -1883,7 +1742,6 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
     if (!renderer || !drag || wasPinching) return;
 
     if (drag.moved) {
-      // Hand the drag's last bit of speed to the camera so it glides to a stop.
       const first = drag.samples[0];
       const last = drag.samples[drag.samples.length - 1];
       const span = last.t - first.t;
@@ -1903,7 +1761,7 @@ export default function Canvas({ focus, onSelect, onNavigate, onNavigateUp, sele
         open(hit);
       } else {
         lastTapRef.current = { id: hit.id, t: now };
-        // No hover on touch screens, so show the details card briefly after a tap.
+
         pointerPosRef.current = { x: event.clientX, y: event.clientY };
         renderer.hoverAt(event.clientX, event.clientY);
         positionTip();

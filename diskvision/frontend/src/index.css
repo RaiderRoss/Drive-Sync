@@ -1,11 +1,10 @@
 :root {
-  /* Windows 11 Dark Theme Colors */
   --bg-primary: #1c1c1c;
-  /* Darker - for sidebar */
+
   --bg-secondary: #252525;
-  /* Lighter - for main content area */
+
   --bg-tertiary: #252525;
-  /* Lighter - for tables and cards */
+
   --bg-hover: #2d2d2d;
   --bg-selected: #3a3a3a;
   --border-color: #2d2d2d;
@@ -21,7 +20,7 @@ body {
 }
 
 #root {
-  min-height: 100dvh;   /* fall back to 100vh if you need older browsers */
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -39,8 +38,6 @@ body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-/* ===== Page styles (page.tsx) ============================================ */
-
 .dv-page {
   flex: 1;
   display: flex;
@@ -49,14 +46,11 @@ body {
   padding: 24px;
   box-sizing: border-box;
   text-align: left;
-  /* The body stays at the browser default; antd is tuned for 14px. */
+
   font-size: 14px;
   line-height: 1.5715;
   letter-spacing: normal;
 }
-
-
-/* Toolbar ----------------------------------------------------------- */
 
 .dv-toolbar {
   display: flex;
@@ -69,10 +63,58 @@ body {
 .dv-toolbar__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
 }
 
-/* Stats ------------------------------------------------------------- */
+.dv-drivebar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.dv-drivebar__select {
+  min-width: 220px;
+}
+
+.dv-drivebar__info {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dv-drive-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dv-drive-option__name {
+  font-weight: 600;
+}
+
+.dv-drive-option__meta {
+  font-size: 12px;
+}
+
+.dv-placeholder {
+  flex: 1;
+  min-height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+}
+
+.dv-placeholder .ant-result-icon > .anticon {
+  font-size: 56px;
+  color: var(--text-secondary);
+}
 
 .dv-stat .ant-statistic-title {
   font-size: 11px;
@@ -88,23 +130,19 @@ body {
   text-overflow: ellipsis;
 }
 
-/* Canvas ------------------------------------------------------------ */
-
-/* The row takes whatever height is left under the toolbar and stats. */
 .dv-panels {
   flex: 1;
   min-height: 0;
 }
 
-/* Let each Col stretch its child. The hidden Col keeps its inline display:none. */
 .dv-panels > .ant-col {
   display: flex;
   flex-direction: column;
 }
 
 .dv-canvas-panel {
-  flex: 1;                 /* grow to the bottom of the page */
-  min-height: 420px;       /* never get smaller than this, the page scrolls instead */
+  flex: 1;
+  min-height: 420px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border-color);
@@ -113,16 +151,13 @@ body {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.32);
 }
 
-/* Whatever Canvas renders (.dv-root) fills the panel. */
 .dv-canvas-panel > * {
   flex: 1;
   min-height: 0;
 }
 
-/* Inspector --------------------------------------------------------- */
-
 .dv-inspector {
-  height: auto;            /* keep natural height; the Col is now a flex column */
+  height: auto;
 }
 
 .dv-entry {
@@ -187,8 +222,6 @@ body {
   margin-top: 16px;
 }
 
-/* Path bar: breadcrumb that turns into an editable path ------------- */
-
 .dv-pathbar {
   flex: 1 1 320px;
   min-width: 0;
@@ -242,8 +275,6 @@ body {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13px;
 }
-
-/* Contents list ------------------------------------------------------ */
 
 .dv-list__tools {
   display: flex;
@@ -343,15 +374,13 @@ body {
   transition: width 0.3s ease;
 }
 
-/* Responsive -------------------------------------------------------- */
-
 @media (max-width: 1024px) {
   .dv-page {
     padding: 16px;
   }
 
   .dv-canvas-panel {
-    min-height: 480px;   /* was height: 480px */
+    min-height: 480px;
   }
 }
 
@@ -362,6 +391,6 @@ body {
   }
 
   .dv-canvas-panel {
-    min-height: 360px;   /* was height: 400px / min-height: 360px */
+    min-height: 360px;
   }
 }
