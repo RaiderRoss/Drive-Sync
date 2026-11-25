@@ -73,6 +73,7 @@ dependencies = [
  "anyhow",
  "axum",
  "jwalk",
+ "libc",
  "rusqlite",
  "serde",
  "serde_json",

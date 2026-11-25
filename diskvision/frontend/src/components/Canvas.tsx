@@ -90,7 +90,7 @@ interface HoverInfo {
 }
 
 const MIN_ZOOM = 0.4;
-const MAX_ZOOM = 8;
+const MAX_ZOOM = 12;
 const TAU = Math.PI * 2;
 
 const DEPTH_LIMIT = 12;

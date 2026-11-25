@@ -33,11 +33,16 @@ CREATE TABLE IF NOT EXISTS nodes (
     is_dir      INTEGER NOT NULL,
     size        INTEGER NOT NULL,
     modified    INTEGER,
-    child_count INTEGER NOT NULL DEFAULT 0
+    child_count INTEGER NOT NULL DEFAULT 0,
+    first_child INTEGER
 );
-CREATE INDEX IF NOT EXISTS nodes_by_parent ON nodes(parent_id, size DESC);
-CREATE INDEX IF NOT EXISTS nodes_by_drive  ON nodes(drive_id);
 ";
+
+const SCHEMA_VERSION: i64 = 2;
+
+const DRIVE_NODES: &str = "drive_id = ?1 AND id BETWEEN
+    (SELECT root_id FROM drives WHERE id = ?1) AND
+    (SELECT root_id + file_count + dir_count - 1 FROM drives WHERE id = ?1)";
 
 fn open_db(path: &Path) -> anyhow::Result<Connection> {
     let conn = Connection::open(path).with_context(|| format!("opening {}", path.display()))?;
@@ -51,7 +56,31 @@ fn init_db(path: &Path) -> anyhow::Result<()> {
     let conn = open_db(path)?;
 
     conn.pragma_update(None, "journal_mode", "WAL")?;
+    let version: i64 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    if version < SCHEMA_VERSION {
+        conn.execute_batch("DROP TABLE IF EXISTS nodes;")?;
+    }
     conn.execute_batch(SCHEMA)?;
+    if version < SCHEMA_VERSION {
+        conn.execute_batch(
+            "UPDATE drives SET root_id = NULL, file_count = 0, dir_count = 0, scanned_at = NULL; VACUUM;",
+        )?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    let (rows, expected): (i64, i64) = conn.query_row(
+        "SELECT (SELECT COUNT(*) FROM nodes),
+                (SELECT COALESCE(SUM(file_count + dir_count), 0) FROM drives WHERE root_id IS NOT NULL)",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    if rows != expected {
+        conn.execute(
+            "DELETE FROM nodes WHERE NOT EXISTS (
+                 SELECT 1 FROM drives d WHERE d.id = nodes.drive_id
+                     AND nodes.id BETWEEN d.root_id AND d.root_id + d.file_count + d.dir_count - 1)",
+            [],
+        )?;
+    }
     Ok(())
 }
 
@@ -221,7 +250,7 @@ async fn list_disks(State(state): State<AppState>) -> ApiResult<Vec<DiskInfo>> {
             path,
             file_system: fs,
             total_space: disk.total_space(),
-            free_space: disk.available_space(),
+            free_space: free_space(mount, disk.available_space()),
             removable: disk.is_removable(),
         });
     }
@@ -287,7 +316,7 @@ async fn delete_drive(State(state): State<AppState>, UrlPath(id): UrlPath<i64>) 
         return Err(AppError(StatusCode::CONFLICT, "drive is being scanned".into()));
     }
     let removed = with_db(&state, move |conn| {
-        conn.execute("DELETE FROM nodes WHERE drive_id = ?1", [id])?;
+        conn.execute(&format!("DELETE FROM nodes WHERE {DRIVE_NODES}"), [id])?;
         Ok(conn.execute("DELETE FROM drives WHERE id = ?1", [id])?)
     })
     .await?;
@@ -336,16 +365,30 @@ async fn start_scan(State(state): State<AppState>, Json(req): Json<ScanRequest>)
     let (db_path, scans, drive_id) = (state.db_path.clone(), state.scans.clone(), drive.id);
     std::thread::spawn(move || {
         let result = run_scan(&db_path, drive_id, &root, &scans);
-        let mut scans = scans.lock().unwrap();
-        if let Some(status) = scans.get_mut(&drive_id) {
-            status.elapsed_ms = status.started.elapsed().as_millis() as u64;
-            match result {
-                Ok(()) => status.phase = ScanPhase::Done,
-                Err(err) => {
-                    eprintln!("scan of {} failed: {err:#}", root.display());
-                    status.phase = ScanPhase::Failed;
-                    status.error = Some(format!("{err:#}"));
+        let stale = {
+            let mut scans = scans.lock().unwrap();
+            let status = scans.get_mut(&drive_id);
+            match (result, status) {
+                (Ok(stale), Some(status)) => {
+                    status.elapsed_ms = status.started.elapsed().as_millis() as u64;
+                    status.phase = ScanPhase::Done;
+                    stale
                 }
+                (Ok(stale), None) => stale,
+                (Err(err), status) => {
+                    eprintln!("scan of {} failed: {err:#}", root.display());
+                    if let Some(status) = status {
+                        status.elapsed_ms = status.started.elapsed().as_millis() as u64;
+                        status.phase = ScanPhase::Failed;
+                        status.error = Some(format!("{err:#}"));
+                    }
+                    None
+                }
+            }
+        };
+        if let Some(range) = stale {
+            if let Err(err) = remove_nodes(&db_path, drive_id, range) {
+                eprintln!("removing the previous scan of {} failed: {err:#}", root.display());
             }
         }
     });
@@ -379,11 +422,7 @@ fn read_meta(meta: &std::fs::Metadata) -> Meta {
     Meta {
         ok: true,
         size: if meta.is_file() { meta.len() } else { 0 },
-        modified: meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
-            .map(|d| d.as_secs() as i64),
+        modified: meta.modified().ok().and_then(|t| t.duration_since(UNIX_EPOCH).ok()).map(|d| d.as_secs() as i64),
         hard_link: hard_link_key(meta),
     }
 }
@@ -419,9 +458,15 @@ struct Entry {
 
 const NO_PARENT: u32 = u32::MAX;
 
-fn run_scan(db_path: &Path, drive_id: i64, root: &Path, scans: &Mutex<HashMap<i64, ScanStatus>>) -> anyhow::Result<()> {
+fn run_scan(
+    db_path: &Path,
+    drive_id: i64,
+    root: &Path,
+    scans: &Mutex<HashMap<i64, ScanStatus>>,
+) -> anyhow::Result<Option<(i64, i64)>> {
     let root_meta = std::fs::metadata(root).with_context(|| format!("reading {}", root.display()))?;
     let root_dev = device_of(&root_meta);
+    let started = Instant::now();
 
     let walker = jwalk::WalkDirGeneric::<((), Meta)>::new(root)
         .skip_hidden(false)
@@ -501,6 +546,7 @@ fn run_scan(db_path: &Path, drive_id: i64, root: &Path, scans: &Mutex<HashMap<i6
         return Err(anyhow!("nothing could be read under {}", root.display()));
     }
     update(&entries, bytes, errors, Some(ScanPhase::Saving));
+    let walked = started.elapsed();
 
     for i in (1..entries.len()).rev() {
         let (parent, size) = (entries[i].parent as usize, entries[i].size);
@@ -509,30 +555,48 @@ fn run_scan(db_path: &Path, drive_id: i64, root: &Path, scans: &Mutex<HashMap<i6
     }
     let dir_count = entries.iter().filter(|e| e.is_dir).count() as i64;
     let file_count = entries.len() as i64 - dir_count;
+    let order = breadth_first_order(&entries);
+    let mut position = vec![0u32; entries.len()];
+    for (pos, &index) in order.iter().enumerate() {
+        position[index as usize] = pos as u32;
+    }
 
     let mut conn = open_db(db_path)?;
+    conn.pragma_update(None, "cache_size", -262_144)?;
+    conn.pragma_update(None, "temp_store", "MEMORY")?;
     let tx = conn.transaction()?;
     let base: i64 = tx.query_row("SELECT COALESCE(MAX(id), 0) + 1 FROM nodes", [], |r| r.get(0))?;
+    let stale: Option<(i64, i64)> = tx
+        .query_row(
+            "SELECT root_id, root_id + file_count + dir_count - 1 FROM drives WHERE id = ?1 AND root_id IS NOT NULL",
+            [drive_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
     {
         let mut insert = tx.prepare(
-            "INSERT INTO nodes (id, drive_id, parent_id, name, is_dir, size, modified, child_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO nodes (id, drive_id, parent_id, name, is_dir, size, modified, child_count, first_child)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         )?;
-        for (i, e) in entries.iter().enumerate() {
-            let parent = (e.parent != NO_PARENT).then(|| base + e.parent as i64);
+        let mut next_child = 1i64;
+        for (pos, &index) in order.iter().enumerate() {
+            let e = &entries[index as usize];
+            let parent = (e.parent != NO_PARENT).then(|| base + position[e.parent as usize] as i64);
+            let first_child = (e.child_count > 0).then(|| base + next_child);
+            next_child += e.child_count as i64;
             insert.execute(params![
-                base + i as i64,
+                base + pos as i64,
                 drive_id,
                 parent,
                 &*e.name,
                 e.is_dir,
                 e.size as i64,
                 e.modified,
-                e.child_count
+                e.child_count,
+                first_child
             ])?;
         }
     }
-    tx.execute("DELETE FROM nodes WHERE drive_id = ?1 AND id < ?2", params![drive_id, base])?;
 
     let (total, free) = volume_space(root);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(0);
@@ -544,7 +608,62 @@ fn run_scan(db_path: &Path, drive_id: i64, root: &Path, scans: &Mutex<HashMap<i6
     tx.commit()?;
     conn.execute_batch("PRAGMA optimize;")?;
     update(&entries, bytes, errors, None);
+    Ok(stale)
+}
+
+fn remove_nodes(db_path: &Path, drive_id: i64, (first, last): (i64, i64)) -> anyhow::Result<()> {
+    let conn = open_db(db_path)?;
+    conn.pragma_update(None, "cache_size", -262_144)?;
+    conn.execute("DELETE FROM nodes WHERE drive_id = ?1 AND id BETWEEN ?2 AND ?3", params![drive_id, first, last])?;
+    conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
     Ok(())
+}
+
+#[cfg(unix)]
+fn free_space(mount: &Path, fallback: u64) -> u64 {
+    use std::os::unix::ffi::OsStrExt;
+    let Ok(c_path) = std::ffi::CString::new(mount.as_os_str().as_bytes()) else {
+        return fallback;
+    };
+    let mut st: libc::statvfs = unsafe { std::mem::zeroed() };
+    if unsafe { libc::statvfs(c_path.as_ptr(), &mut st) } != 0 {
+        return fallback;
+    }
+    (st.f_bfree as u64).saturating_mul(st.f_frsize as u64)
+}
+#[cfg(not(unix))]
+fn free_space(_: &Path, fallback: u64) -> u64 {
+    fallback
+}
+
+fn breadth_first_order(entries: &[Entry]) -> Vec<u32> {
+    let mut offsets = vec![0u32; entries.len() + 1];
+    for (i, e) in entries.iter().enumerate() {
+        offsets[i + 1] = offsets[i] + e.child_count;
+    }
+    let mut fill = offsets.clone();
+    let mut kids = vec![0u32; entries.len().saturating_sub(1)];
+    for (i, e) in entries.iter().enumerate().skip(1) {
+        let slot = &mut fill[e.parent as usize];
+        kids[*slot as usize] = i as u32;
+        *slot += 1;
+    }
+    for i in 0..entries.len() {
+        let group = &mut kids[offsets[i] as usize..offsets[i + 1] as usize];
+        group.sort_unstable_by(|&a, &b| {
+            let (a, b) = (&entries[a as usize], &entries[b as usize]);
+            b.size.cmp(&a.size).then_with(|| a.name.cmp(&b.name))
+        });
+    }
+    let mut order = Vec::with_capacity(entries.len());
+    order.push(0u32);
+    let mut head = 0;
+    while head < order.len() {
+        let node = order[head] as usize;
+        order.extend_from_slice(&kids[offsets[node] as usize..offsets[node + 1] as usize]);
+        head += 1;
+    }
+    order
 }
 
 fn volume_space(path: &Path) -> (Option<i64>, Option<i64>) {
@@ -554,7 +673,7 @@ fn volume_space(path: &Path) -> (Option<i64>, Option<i64>) {
         .iter()
         .filter(|d| path.starts_with(d.mount_point()))
         .max_by_key(|d| d.mount_point().as_os_str().len())
-        .map(|d| (Some(d.total_space() as i64), Some(d.available_space() as i64)))
+        .map(|d| (Some(d.total_space() as i64), Some(free_space(d.mount_point(), d.available_space()) as i64)))
         .unwrap_or((None, None))
 }
 
@@ -570,6 +689,9 @@ struct TreeNode {
     #[serde(skip_serializing_if = "Option::is_none")]
     child_count: Option<i64>,
 
+    #[serde(skip)]
+    first_child: Option<i64>,
+
     #[serde(skip_serializing_if = "Option::is_none")]
     children: Option<Vec<TreeNode>>,
 
@@ -579,7 +701,7 @@ struct TreeNode {
     more_size: Option<i64>,
 }
 
-const NODE_COLUMNS: &str = "id, name, is_dir, size, modified, child_count";
+const NODE_COLUMNS: &str = "id, name, is_dir, size, modified, child_count, first_child";
 
 fn node_from_row(r: &rusqlite::Row) -> rusqlite::Result<TreeNode> {
     let is_dir: bool = r.get(2)?;
@@ -590,6 +712,7 @@ fn node_from_row(r: &rusqlite::Row) -> rusqlite::Result<TreeNode> {
         size: r.get(3)?,
         modified: r.get::<_, Option<i64>>(4)?.map(format_time),
         child_count: if is_dir { Some(r.get(5)?) } else { None },
+        first_child: r.get(6)?,
         children: None,
         more_count: None,
         more_size: None,
@@ -606,7 +729,11 @@ struct TreeQuery {
     limits: Option<String>,
 }
 
-async fn tree(State(state): State<AppState>, UrlPath(id): UrlPath<i64>, Query(q): Query<TreeQuery>) -> ApiResult<TreeNode> {
+async fn tree(
+    State(state): State<AppState>,
+    UrlPath(id): UrlPath<i64>,
+    Query(q): Query<TreeQuery>,
+) -> ApiResult<TreeNode> {
     let depth = q.depth.unwrap_or(4).clamp(1, MAX_DEPTH);
     let limits: Vec<usize> = match q.limits.as_deref() {
         Some(text) => text
@@ -624,9 +751,8 @@ async fn tree(State(state): State<AppState>, UrlPath(id): UrlPath<i64>, Query(q)
             .query_row(&format!("SELECT {NODE_COLUMNS} FROM nodes WHERE id = ?1"), [id], node_from_row)
             .optional()?
             .ok_or_else(|| AppError::not_found("node"))?;
-        let mut children = conn.prepare_cached(&format!(
-            "SELECT {NODE_COLUMNS} FROM nodes WHERE parent_id = ?1 ORDER BY size DESC, name LIMIT ?2"
-        ))?;
+        let mut children = conn
+            .prepare_cached(&format!("SELECT {NODE_COLUMNS} FROM nodes WHERE id >= ?1 AND id < ?1 + ?2 ORDER BY id"))?;
         expand(&mut children, &mut root, 0, depth, &limits)?;
         Ok(root)
     })
@@ -634,15 +760,21 @@ async fn tree(State(state): State<AppState>, UrlPath(id): UrlPath<i64>, Query(q)
     Ok(Json(node))
 }
 
-fn expand(children: &mut Statement, node: &mut TreeNode, depth: usize, max_depth: usize, limits: &[usize]) -> anyhow::Result<()> {
-    let Some(total) = node.child_count else { return Ok(()) };
+fn expand(
+    children: &mut Statement,
+    node: &mut TreeNode,
+    depth: usize,
+    max_depth: usize,
+    limits: &[usize],
+) -> anyhow::Result<()> {
+    let (Some(total), Some(first)) = (node.child_count, node.first_child) else {
+        return Ok(());
+    };
     if depth >= max_depth {
         return Ok(());
     }
-    let limit = limits[depth.min(limits.len() - 1)];
-    let mut kids = children
-        .query_map(params![node.id, limit as i64], node_from_row)?
-        .collect::<Result<Vec<_>, _>>()?;
+    let limit = (limits[depth.min(limits.len() - 1)] as i64).min(total);
+    let mut kids = children.query_map(params![first, limit], node_from_row)?.collect::<Result<Vec<_>, _>>()?;
 
     let left_out = total - kids.len() as i64;
     if left_out > 0 {
@@ -702,7 +834,8 @@ async fn resolve_path(
         }
 
         let mut find = conn.prepare_cached(
-            "SELECT id FROM nodes WHERE parent_id = ?1 AND name = ?2 COLLATE NOCASE ORDER BY name = ?2 DESC LIMIT 1",
+            "SELECT c.id FROM nodes p JOIN nodes c ON c.id >= p.first_child AND c.id < p.first_child + p.child_count
+             WHERE p.id = ?1 AND c.name = ?2 COLLATE NOCASE ORDER BY c.name = ?2 DESC LIMIT 1",
         )?;
         let mut current = root_id;
         for part in parts {
@@ -731,7 +864,11 @@ struct SearchHit {
     path: String,
 }
 
-async fn search(State(state): State<AppState>, UrlPath(drive): UrlPath<i64>, Query(q): Query<SearchQuery>) -> ApiResult<Vec<SearchHit>> {
+async fn search(
+    State(state): State<AppState>,
+    UrlPath(drive): UrlPath<i64>,
+    Query(q): Query<SearchQuery>,
+) -> ApiResult<Vec<SearchHit>> {
     let needle = q.q.trim().to_string();
     if needle.is_empty() {
         return Ok(Json(Vec::new()));
@@ -741,7 +878,7 @@ async fn search(State(state): State<AppState>, UrlPath(drive): UrlPath<i64>, Que
 
     let hits = with_db(&state, move |conn| {
         let mut stmt = conn.prepare(&format!(
-            "SELECT {NODE_COLUMNS} FROM nodes WHERE drive_id = ?1 AND name LIKE ?2 ESCAPE '\\'
+            "SELECT {NODE_COLUMNS} FROM nodes WHERE {DRIVE_NODES} AND name LIKE ?2 ESCAPE '\\'
              ORDER BY size DESC LIMIT ?3"
         ))?;
         let nodes = stmt.query_map(params![drive, pattern, limit], node_from_row)?.collect::<Result<Vec<_>, _>>()?;

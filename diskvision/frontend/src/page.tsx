@@ -3,36 +3,33 @@ import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, ReactNode } fr
 import {
   Breadcrumb,
   Button,
-  Card,
-  Col,
   ConfigProvider,
-  Descriptions,
-  Divider,
   Empty,
   Input,
-  Progress,
   Result,
-  Row,
   Segmented,
   Select,
   Spin,
-  Statistic,
   Tag,
   Tooltip,
   Typography,
   message,
   theme,
 } from "antd";
-import type { InputRef, ThemeConfig } from "antd";
+import type { ButtonProps, InputRef, ThemeConfig } from "antd";
 import {
   AppstoreOutlined,
-  ArrowLeftOutlined,
+  CaretDownOutlined,
+  CaretUpOutlined,
   EditOutlined,
   EllipsisOutlined,
   FileOutlined,
   FolderFilled,
+  FolderOpenOutlined,
   InfoCircleOutlined,
   DatabaseOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
   ReloadOutlined,
   SearchOutlined,
   SyncOutlined,
@@ -42,7 +39,7 @@ import type { FsNode } from "./components/Canvas";
 import { api, ApiError, isScanning, toFsNode } from "./api";
 import type { DiskInfo, DriveInfo, FsEntry, ScanStatus } from "./api";
 
-const { Title, Text } = Typography;
+const { Text } = Typography;
 
 function findPath(root: FsNode, id: string, path: FsNode[] = []): FsNode[] | undefined {
   const next = [...path, root];
@@ -209,9 +206,39 @@ function PathBar({
   );
 }
 
-type SortKey = "size" | "name";
+type SortKey = "name" | "size" | "modified" | "type";
+type SortState = { key: SortKey; desc: boolean };
 
-function ContentsList({
+function typeLabel(node: FsNode): string {
+  if (node.kind === "directory") return "File folder";
+  if (node.kind === "cluster") return "Smaller items";
+  return node.extension ? `${node.extension.toUpperCase()} file` : "File";
+}
+
+const COLUMNS: Array<{ key: SortKey; label: string; className: string; firstDesc: boolean }> = [
+  { key: "name", label: "Name", className: "dv-col-name", firstDesc: false },
+  { key: "size", label: "Size", className: "dv-col-size", firstDesc: true },
+  { key: "size", label: "Share", className: "dv-col-share", firstDesc: true },
+  { key: "modified", label: "Date modified", className: "dv-col-modified", firstDesc: true },
+  { key: "type", label: "Type", className: "dv-col-type", firstDesc: false },
+];
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+function compareBy(key: SortKey, a: FsNode, b: FsNode): number {
+  switch (key) {
+    case "size":
+      return a.size - b.size;
+    case "modified":
+      return (a.modified ?? "").localeCompare(b.modified ?? "");
+    case "type":
+      return collator.compare(typeLabel(a), typeLabel(b)) || collator.compare(a.name, b.name);
+    case "name":
+      return collator.compare(a.name, b.name);
+  }
+}
+
+function FileTable({
   folder,
   selectedId,
   onSelect,
@@ -223,7 +250,8 @@ function ContentsList({
   onOpen: (node: FsNode) => void;
 }) {
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<SortKey>("size");
+  const [sort, setSort] = useState<SortState>({ key: "size", desc: true });
+  const rowsRef = useRef<HTMLDivElement>(null);
   useEffect(() => setQuery(""), [folder.id]);
 
   const items = useMemo(() => {
@@ -231,66 +259,204 @@ function ContentsList({
     const all = folder.children ?? [];
     const list = all.filter(child => child.kind !== "cluster" && child.name.toLowerCase().includes(needle));
     const rest = needle ? [] : all.filter(child => child.kind === "cluster");
-    const sorted =
-      sort === "size"
-        ? list.sort((a, b) => b.size - a.size)
-        : list.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }));
-    return [...sorted, ...rest];
+    const foldersFirst = sort.key === "name" || sort.key === "type";
+    list.sort((a, b) => {
+      if (foldersFirst && a.kind !== b.kind) return a.kind === "directory" ? -1 : 1;
+      const order = compareBy(sort.key, a, b);
+      return sort.desc ? -order : order;
+    });
+    return [...list, ...rest];
   }, [folder, query, sort]);
 
+  useEffect(() => {
+    rowsRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
+
   const total = itemCount(folder);
+  const selectedItem = items.find(node => node.id === selectedId);
+
+  const toggleSort = (key: SortKey, firstDesc: boolean) =>
+    setSort(current => (current.key === key ? { key, desc: !current.desc } : { key, desc: firstDesc }));
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (items.length === 0) return;
+    const index = items.findIndex(node => node.id === selectedId);
+    const move = (to: number) => {
+      event.preventDefault();
+      onSelect(items[Math.max(0, Math.min(items.length - 1, to))]);
+    };
+    if (event.key === "ArrowDown") move(index + 1);
+    else if (event.key === "ArrowUp") move(index < 0 ? items.length - 1 : index - 1);
+    else if (event.key === "Home") move(0);
+    else if (event.key === "End") move(items.length - 1);
+    else if (event.key === "Enter" && selectedItem) {
+      event.preventDefault();
+      onOpen(selectedItem);
+    }
+  };
 
   return (
-    <div className="dv-list">
-      <div className="dv-list__tools">
+    <section className="dv-files">
+      <div className="dv-files__toolbar">
+        <span className="dv-files__title">
+          <FolderFilled style={{ color: colorFor(folder) }} />
+          <Text strong ellipsis>{folder.name}</Text>
+        </span>
         <Input
           allowClear
+          className="dv-files__filter"
           value={query}
           onChange={event => setQuery(event.target.value)}
           prefix={<SearchOutlined />}
-          placeholder={`Filter ${total} item${total === 1 ? "" : "s"}…`}
-        />
-        <Segmented<SortKey>
-          value={sort}
-          onChange={setSort}
-          options={[
-            { value: "size", label: "Size" },
-            { value: "name", label: "Name" },
-          ]}
+          placeholder={`Filter ${total.toLocaleString()} item${total === 1 ? "" : "s"}`}
         />
       </div>
 
-      {items.length === 0 ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={total ? "Nothing matches the filter" : "This folder is empty"} />
-      ) : (
-        <div className="dv-list__rows" role="listbox" aria-label={`Contents of ${folder.name}`}>
-          {items.map(node => {
-            const share = folder.size > 0 ? node.size / folder.size : 0;
+      <div className="dv-files__table">
+        <div className="dv-files__head dv-files__grid" role="row">
+          {COLUMNS.map(column => {
+            const active = sort.key === column.key && column.className !== "dv-col-share";
             return (
               <button
-                key={node.id}
+                key={column.className}
                 type="button"
-                role="option"
-                aria-selected={node.id === selectedId}
-                className="dv-item"
-                style={{ "--item": colorFor(node) } as CSSProperties}
-                onClick={() => onSelect(node)}
-                onDoubleClick={() => onOpen(node)}
-                title={node.kind === "directory" ? "Double-click to open" : undefined}
+                role="columnheader"
+                aria-sort={active ? (sort.desc ? "descending" : "ascending") : undefined}
+                className={`dv-files__th ${column.className}${active ? " is-active" : ""}`}
+                onClick={() => toggleSort(column.key, column.firstDesc)}
               >
-                <span className="dv-item__icon"><NodeIcon node={node} /></span>
-                <span className="dv-item__name">{node.name}</span>
-                <span className="dv-item__size">{formatBytes(node.size)}</span>
-                <span className="dv-item__share">{formatShare(share)}</span>
-                <span className="dv-item__bar" aria-hidden="true">
-                  <i style={{ width: `${Math.max(share * 100, 0.6)}%` }} />
-                </span>
+                <span>{column.label}</span>
+                {active && (sort.desc ? <CaretDownOutlined /> : <CaretUpOutlined />)}
               </button>
             );
           })}
         </div>
+
+        {items.length === 0 ? (
+          <div className="dv-files__empty">
+            <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={total ? "Nothing matches the filter" : "This folder is empty"} />
+          </div>
+        ) : (
+          <div
+            ref={rowsRef}
+            className="dv-files__rows"
+            role="listbox"
+            tabIndex={0}
+            aria-label={`Contents of ${folder.name}`}
+            onKeyDown={onKeyDown}
+          >
+            {items.map(node => {
+              const share = folder.size > 0 ? node.size / folder.size : 0;
+              return (
+                <div
+                  key={node.id}
+                  role="option"
+                  aria-selected={node.id === selectedId}
+                  className={`dv-files__row dv-files__grid${node.kind === "cluster" ? " is-cluster" : ""}`}
+                  style={{ "--item": colorFor(node) } as CSSProperties}
+                  onClick={() => onSelect(node)}
+                  onDoubleClick={() => onOpen(node)}
+                  title={node.kind === "directory" ? "Double-click to open" : undefined}
+                >
+                  <span className="dv-col-name">
+                    <NodeIcon node={node} />
+                    <span className="dv-files__name">{node.name}</span>
+                  </span>
+                  <span className="dv-col-size">{formatBytes(node.size)}</span>
+                  <span className="dv-col-share">
+                    <span className="dv-files__bar" aria-hidden="true">
+                      <i style={{ width: `${Math.max(share * 100, 0.8)}%` }} />
+                    </span>
+                    <span className="dv-files__pct">{formatShare(share)}</span>
+                  </span>
+                  <span className="dv-col-modified">{node.modified ?? ""}</span>
+                  <span className="dv-col-type">{typeLabel(node)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <footer className="dv-files__status">
+        <span>
+          {total.toLocaleString()} item{total === 1 ? "" : "s"}
+          <span className="dv-files__dot">·</span>
+          {formatBytes(folder.size)}
+        </span>
+        {selectedItem && (
+          <span>
+            1 item selected
+            <span className="dv-files__dot">·</span>
+            {formatBytes(selectedItem.size)}
+          </span>
+        )}
+      </footer>
+    </section>
+  );
+}
+
+function DetailsPane({
+  node,
+  path,
+  parent,
+  isFocus,
+  onOpen,
+}: {
+  node: FsNode;
+  path: FsNode[];
+  parent: FsNode | null;
+  isFocus: boolean;
+  onOpen: (node: FsNode) => void;
+}) {
+  const share = parent && parent.size > 0 ? node.size / parent.size : null;
+  const location = formatPath(path.slice(0, -1)) || formatPath(path);
+  const rows: Array<[string, ReactNode]> = [["Type", typeLabel(node)]];
+  if (node.kind === "directory") rows.push(["Contains", `${itemCount(node).toLocaleString()} items`]);
+  if (node.kind === "cluster") rows.push(["Contains", `${(node.count ?? 0).toLocaleString()} items`]);
+  if (node.kind !== "cluster") rows.push(["Modified", node.modified ? `${node.modified} UTC` : "Unknown"]);
+  rows.push([
+    "Location",
+    <Text key="location" className="dv-pane__path" copyable={{ text: formatPath(path) }}>{location}</Text>,
+  ]);
+
+  return (
+    <aside className="dv-pane" style={{ "--item": colorFor(node) } as CSSProperties}>
+      <div className="dv-pane__hero">
+        <span className="dv-pane__icon"><NodeIcon node={node} /></span>
+        <div className="dv-pane__name">{node.name}</div>
+        <Text type="secondary">{typeLabel(node)}</Text>
+      </div>
+
+      <div className="dv-pane__size">
+        <div className="dv-pane__bytes">{formatBytes(node.size)}</div>
+        {share !== null && parent && (
+          <>
+            <div className="dv-files__bar dv-pane__bar" aria-hidden="true">
+              <i style={{ width: `${Math.max(share * 100, 0.8)}%` }} />
+            </div>
+            <Text type="secondary" className="dv-pane__share">
+              {formatShare(share)} of {parent.name}
+            </Text>
+          </>
+        )}
+      </div>
+
+      <dl className="dv-pane__props">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {node.kind === "directory" && !isFocus && (
+        <Button block type="primary" icon={<FolderOpenOutlined />} onClick={() => onOpen(node)}>
+          Open folder
+        </Button>
       )}
-    </div>
+    </aside>
   );
 }
 
@@ -326,7 +492,7 @@ function scanSummary(status: ScanStatus): string {
   return status.phase === "saving" ? `Saving ${items}…` : `Scanning… ${items}`;
 }
 
-function DriveBar({
+function DriveSection({
   choices,
   current,
   onPick,
@@ -344,23 +510,18 @@ function DriveBar({
 
   let info: ReactNode = null;
   if (scanning && status) {
-    info = <Text type="secondary">{scanSummary(status)}</Text>;
+    info = scanSummary(status);
   } else if (scanned && drive) {
     const unreadable = status?.errors ? ` · ${status.errors.toLocaleString()} unreadable` : "";
-    info = (
-      <Text type="secondary">
-        Scanned {drive.scanned_at} UTC · {drive.file_count.toLocaleString()} files, {drive.dir_count.toLocaleString()} folders
-        {unreadable}
-      </Text>
-    );
+    info = `Scanned ${drive.scanned_at} UTC · ${drive.file_count.toLocaleString()} files, ${drive.dir_count.toLocaleString()} folders${unreadable}`;
   } else if (current) {
-    info = <Text type="secondary">Not scanned yet</Text>;
+    info = "Not scanned yet";
   }
 
   return (
-    <div className="dv-drivebar">
+    <div className="dv-drive">
       <Select<string>
-        className="dv-drivebar__select"
+        className="dv-drive__select"
         value={current?.path}
         onChange={onPick}
         placeholder="Choose a drive"
@@ -386,15 +547,173 @@ function DriveBar({
         })}
       />
       <Button
-        type={scanned ? "default" : "primary"}
+        block
+        color="primary"
+        variant={scanned ? "filled" : "solid"}
         icon={<SyncOutlined spin={scanning} />}
         disabled={!current || scanning}
         onClick={() => current && onScan(current.path)}
       >
         {scanning ? "Scanning" : scanned ? "Rescan" : "Scan"}
       </Button>
-      <div className="dv-drivebar__info">{info}</div>
+      {info && <Text type="secondary" className="dv-drive__info">{info}</Text>}
     </div>
+  );
+}
+
+const SIDEBAR_KEY = "diskvision.sidebar";
+
+function initialCollapsed(): boolean {
+  const saved = localStorage.getItem(SIDEBAR_KEY);
+  if (saved !== null) return saved === "collapsed";
+  return window.innerWidth < 768;
+}
+
+function RailButton({
+  title,
+  icon,
+  onClick,
+  disabled,
+  active,
+  color = "default",
+  solid = false,
+}: {
+  title: string;
+  icon: ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+  active?: boolean;
+  color?: ButtonProps["color"];
+  solid?: boolean;
+}) {
+  return (
+    <Tooltip title={title} placement="right">
+      <Button
+        color={active ? "primary" : color}
+        variant={active || solid ? "solid" : color === "default" ? "text" : "filled"}
+        icon={icon}
+        aria-label={title}
+        aria-pressed={active}
+        disabled={disabled}
+        onClick={onClick}
+      />
+    </Tooltip>
+  );
+}
+
+function Sidebar({
+  collapsed,
+  onToggle,
+  choices,
+  current,
+  onPick,
+  onScan,
+  panelView,
+  onPanelView,
+  focus,
+  onReset,
+}: {
+  collapsed: boolean;
+  onToggle: () => void;
+  choices: DriveChoice[];
+  current: DriveChoice | undefined;
+  onPick: (path: string) => void;
+  onScan: (path: string) => void;
+  panelView: PanelView;
+  onPanelView: (view: PanelView) => void;
+  focus: FsNode | null;
+  onReset: () => void;
+}) {
+  const drive = current?.drive;
+  const scanning = isScanning(drive?.scan);
+  const scanned = drive?.root_id != null;
+
+  return (
+    <aside className={`dv-sidebar${collapsed ? " dv-sidebar--collapsed" : ""}`} aria-label="Sidebar">
+      <div className="dv-sidebar__head">
+        {!collapsed && (
+          <span className="dv-sidebar__brand">
+            <DatabaseOutlined /> DiskVision
+          </span>
+        )}
+        <Tooltip title={collapsed ? "Expand sidebar" : "Collapse sidebar"} placement="right">
+          <Button
+            type="text"
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-expanded={!collapsed}
+            onClick={onToggle}
+          />
+        </Tooltip>
+      </div>
+
+      {collapsed ? (
+        <div className="dv-sidebar__rail">
+          <RailButton title={current ? `Drive: ${current.name}` : "Choose a drive"} icon={<DatabaseOutlined />} onClick={onToggle} />
+          <RailButton
+            title={scanning ? "Scanning…" : scanned ? "Rescan" : "Scan"}
+            icon={<SyncOutlined spin={scanning} />}
+            color="primary"
+            disabled={!current || scanning}
+            onClick={() => current && onScan(current.path)}
+          />
+          <span className="dv-sidebar__sep" />
+          {PANEL_OPTIONS.map(option => (
+            <RailButton
+              key={option.value}
+              title={option.label}
+              icon={option.icon}
+              active={panelView === option.value}
+              disabled={!focus}
+              onClick={() => onPanelView(option.value)}
+            />
+          ))}
+          <span className="dv-sidebar__sep" />
+          <RailButton title="Reset view" icon={<ReloadOutlined />} color="purple" solid disabled={!focus} onClick={onReset} />
+        </div>
+      ) : (
+        <div className="dv-sidebar__body">
+          <section>
+            <h4 className="dv-sidebar__label">Drive</h4>
+            <DriveSection choices={choices} current={current} onPick={onPick} onScan={onScan} />
+          </section>
+
+          <section>
+            <h4 className="dv-sidebar__label">View</h4>
+            <Segmented<PanelView> block options={PANEL_OPTIONS} value={panelView} onChange={onPanelView} disabled={!focus} />
+          </section>
+
+          <section className="dv-sidebar__nav">
+            <h4 className="dv-sidebar__label">Navigate</h4>
+            <Button block color="purple" variant="solid" icon={<ReloadOutlined />} onClick={onReset} disabled={!focus}>
+              Reset view
+            </Button>
+          </section>
+
+          {focus && (
+            <section>
+              <h4 className="dv-sidebar__label">
+                Current folder
+              </h4>
+              <dl className="dv-stats">
+                <div>
+                  <dt>Focal directory</dt>
+                  <dd title={focus.name}>{focus.name}</dd>
+                </div>
+                <div>
+                  <dt>Storage consumption</dt>
+                  <dd>{formatBytes(focus.size)}</dd>
+                </div>
+                <div>
+                  <dt>Direct children</dt>
+                  <dd>{itemCount(focus).toLocaleString()}</dd>
+                </div>
+              </dl>
+            </section>
+          )}
+        </div>
+      )}
+    </aside>
   );
 }
 
@@ -431,10 +750,10 @@ function Explorer() {
   const [depth, setDepth] = useState(DEFAULT_DEPTH);
   const [generation, setGeneration] = useState(0);
   const [view, setView] = useState<TreeView | null>(null);
-  const [loading, setLoading] = useState(false);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [contents, setContents] = useState<FsNode | null>(null);
   const [panelView, setPanelView] = useState<PanelView>("map");
+  const [collapsed, setCollapsed] = useState(initialCollapsed);
 
   const choices = useMemo(() => driveChoices(disks, drives), [disks, drives]);
 
@@ -550,7 +869,6 @@ function Explorer() {
     if (shown && shown.tree.id === focusId && shown.depth >= depth && shown.generation === generation) return;
 
     const controller = new AbortController();
-    setLoading(true);
     Promise.all([api.tree(focusId, depth, undefined, controller.signal), api.path(focusId, controller.signal)])
       .then(([entry, pathEntries]) => {
         const tree = toFsNode(entry);
@@ -569,9 +887,6 @@ function Explorer() {
         } else {
           showError(err);
         }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
   }, [focusId, depth, generation, driveId, rootId, showError]);
@@ -620,9 +935,36 @@ function Explorer() {
 
   const shownView = view && view.driveId === driveId && rootId != null ? view : null;
 
-  const driveBar = <DriveBar choices={choices} current={current} onPick={pickDrive} onScan={path => void startScan(path)} />;
+  const toggleSidebar = () => {
+    setCollapsed(was => {
+      localStorage.setItem(SIDEBAR_KEY, was ? "expanded" : "collapsed");
+      return !was;
+    });
+  };
 
-  if (backendError || !shownView) {
+  const focus = shownView?.tree ?? null;
+  const path = shownView?.path ?? [];
+
+  const reset = () => {
+    if (rootId != null) setFocusId(String(rootId));
+  };
+
+  const sidebar = (
+    <Sidebar
+      collapsed={collapsed}
+      onToggle={toggleSidebar}
+      choices={choices}
+      current={current}
+      onPick={pickDrive}
+      onScan={drivePath => void startScan(drivePath)}
+      panelView={panelView}
+      onPanelView={setPanelView}
+      focus={focus}
+      onReset={reset}
+    />
+  );
+
+  if (backendError || !shownView || !focus) {
     const status = drive?.scan;
     let body: ReactNode;
     if (backendError) {
@@ -657,154 +999,56 @@ function Explorer() {
       body = <Spin size="large" />;
     }
     return (
-      <main className="dv-page">
+      <div className="dv-page">
         {messageHolder}
-        {driveBar}
-        <div className="dv-placeholder">{body}</div>
-      </main>
+        {sidebar}
+        <main className="dv-main">
+          <div className="dv-placeholder">{body}</div>
+        </main>
+      </div>
     );
   }
 
-  const focus = shownView.tree;
-  const path = shownView.path;
   const selected = selection?.node ?? focus;
   const selectedPath = selection?.path ?? path;
   const selectedParent = selectedPath.length > 1 ? selectedPath[selectedPath.length - 2] : null;
-  const selectedShare = selectedParent && selectedParent.size > 0 ? selected.size / selectedParent.size : null;
   const contentsFolder = contents?.id === focus.id ? contents : focus;
 
-  const goBack = () => {
-    if (path.length > 1) navigateTo(path[path.length - 2]);
-  };
-
-  const reset = () => {
-    if (rootId != null) setFocusId(String(rootId));
-  };
-
   return (
-    <main className="dv-page">
+    <div className="dv-page">
       {messageHolder}
-      {driveBar}
+      {sidebar}
 
-      <div className="dv-toolbar">
-        <PathBar path={path} onNavigate={navigateTo} onOpenFile={openFile} onResolve={resolve} />
-        <div className="dv-toolbar__actions">
-          <Spin size="small" spinning={loading} delay={150} />
-          <Segmented<PanelView>
-            options={PANEL_OPTIONS}
-            value={panelView}
-            onChange={setPanelView}
-          />
-          <Button icon={<ArrowLeftOutlined />} onClick={goBack} disabled={path.length <= 1}>
-            Parent directory
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={reset}>Reset view</Button>
+      <main className="dv-main">
+        <div className="dv-pathbar-overlay">
+          <PathBar path={path} onNavigate={navigateTo} onOpenFile={openFile} onResolve={resolve} />
         </div>
-      </div>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={8}>
-          <Card size="small"><Statistic className="dv-stat" title="Focal directory" value={focus.name} /></Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card size="small"><Statistic className="dv-stat" title="Storage consumption" value={formatBytes(focus.size)} /></Card>
-        </Col>
-        <Col xs={24} sm={8}>
-          <Card size="small"><Statistic className="dv-stat" title="Direct children" value={itemCount(focus)} /></Card>
-        </Col>
-      </Row>
-
-      <Row gutter={[16, 16]} className="dv-panels">
-        <Col xs={24} style={panelView === "map" ? undefined : { display: "none" }}>
-          <div className="dv-canvas-panel">
-            <Canvas
-              focus={focus}
-              depth={depth}
-              onDepthChange={setDepth}
-              layoutDepth={shownView.depth}
-              onSelect={select}
-              onNavigate={navigateTo}
-            />
-          </div>
-        </Col>
+        <div className="dv-canvas-panel" style={panelView === "map" ? undefined : { display: "none" }}>
+          <Canvas
+            focus={focus}
+            depth={depth}
+            onDepthChange={setDepth}
+            layoutDepth={shownView.depth}
+            onSelect={select}
+            onNavigate={navigateTo}
+          />
+        </div>
 
         {panelView === "details" && (
-          <>
-            <Col xs={24} lg={9}>
-              <Card
-                className="dv-inspector"
-                title={
-                  <span className="dv-entry">
-                    <NodeIcon node={selected} />
-                    <Text strong ellipsis>{selected.name}</Text>
-                  </span>
-                }
-              >
-                <Title level={2} className="dv-size">{formatBytes(selected.size)}</Title>
-                <Text type="secondary">{selected.kind === "directory" ? "Folder size" : selected.kind === "cluster" ? "Combined size" : "File size"}</Text>
-
-                {selectedParent && selectedShare !== null && (
-                  <div className="dv-share">
-                    <div className="dv-share__row">
-                      <Text type="secondary">Share of {selectedParent.name}</Text>
-                      <Text strong>{formatShare(selectedShare)}</Text>
-                    </div>
-                    <Progress
-                      percent={Math.min(100, selectedShare * 100)}
-                      showInfo={false}
-                      size="small"
-                      strokeColor={colorFor(selected)}
-                    />
-                  </div>
-                )}
-
-                <Divider />
-                <Descriptions
-                  className="dv-descriptions"
-                  size="small"
-                  colon={false}
-                  column={1}
-                  items={[
-                    { key: "type", label: "Type", children: <Tag>{selected.kind === "directory" ? "folder" : selected.kind}</Tag> },
-                    ...(selected.kind === "directory"
-                      ? [{ key: "items", label: "Items inside", children: itemCount(selected).toLocaleString() }]
-                      : selected.kind === "cluster"
-                        ? [{ key: "items", label: "Items", children: (selected.count ?? 0).toLocaleString() }]
-                        : [{ key: "ext", label: "Extension", children: selected.extension ? `.${selected.extension}` : "—" }]),
-                    ...(selected.kind === "cluster" ? [] : [{ key: "modified", label: "Last modified", children: selected.modified ? `${selected.modified} UTC` : "Unknown" }]),
-                    {
-                      key: "path",
-                      label: "Path",
-                      children: <Text className="dv-path" copyable={{ text: formatPath(selectedPath) }}>{formatPath(selectedPath)}</Text>,
-                    },
-                  ]}
-                />
-                {selected.kind === "directory" && selected.id !== focus.id && (
-                  <Button block className="dv-open" icon={<FolderFilled />} onClick={() => navigateTo(selected)}>
-                    Open folder
-                  </Button>
-                )}
-              </Card>
-            </Col>
-
-            <Col xs={24} lg={15}>
-              <Card
-                className="dv-inspector"
-                title={
-                  <span className="dv-entry">
-                    <FolderFilled style={{ color: colorFor(focus) }} />
-                    <Text strong ellipsis>Contents of {focus.name}</Text>
-                  </span>
-                }
-                extra={<Text type="secondary">{formatBytes(focus.size)}</Text>}
-              >
-                <ContentsList folder={contentsFolder} selectedId={selected.id} onSelect={select} onOpen={navigateTo} />
-              </Card>
-            </Col>
-          </>
+          <div className="dv-details">
+            <FileTable folder={contentsFolder} selectedId={selected.id} onSelect={select} onOpen={navigateTo} />
+            <DetailsPane
+              node={selected}
+              path={selectedPath}
+              parent={selectedParent}
+              isFocus={selected.id === focus.id}
+              onOpen={navigateTo}
+            />
+          </div>
         )}
-      </Row>
-    </main>
+      </main>
+    </div>
   );
 }
 

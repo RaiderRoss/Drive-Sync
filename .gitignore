@@ -1,6 +1,7 @@
 # Dependencies and build outputs
 target/
 node_modules/
+dist/
 
 # Rust/Cargo specific
 changes.toml
