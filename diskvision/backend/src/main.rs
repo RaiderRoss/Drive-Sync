@@ -466,8 +466,7 @@ fn run_scan(
 ) -> anyhow::Result<Option<(i64, i64)>> {
     let root_meta = std::fs::metadata(root).with_context(|| format!("reading {}", root.display()))?;
     let root_dev = device_of(&root_meta);
-    let started = Instant::now();
-
+    
     let walker = jwalk::WalkDirGeneric::<((), Meta)>::new(root)
         .skip_hidden(false)
         .follow_links(false)
@@ -546,7 +545,6 @@ fn run_scan(
         return Err(anyhow!("nothing could be read under {}", root.display()));
     }
     update(&entries, bytes, errors, Some(ScanPhase::Saving));
-    let walked = started.elapsed();
 
     for i in (1..entries.len()).rev() {
         let (parent, size) = (entries[i].parent as usize, entries[i].size);
