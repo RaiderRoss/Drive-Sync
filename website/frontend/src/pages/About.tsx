@@ -1,6 +1,5 @@
 import {
   AppstoreOutlined,
-  CheckCircleOutlined,
   CloudOutlined,
   DesktopOutlined,
   LockOutlined,
@@ -12,7 +11,7 @@ import { Card, Col, Divider, Row, Space, Statistic, Tag, Typography } from 'antd
 import FolderFloat from '../Components/FolderFloat';
 import GhostFibers from '../Components/GhostFibers';
 import SecureFolder from '../Components/SecureFolder';
-
+import './about.css';
 const { Title, Text, Paragraph } = Typography;
 
 const panelStyle: React.CSSProperties = {
@@ -87,9 +86,6 @@ export default function About() {
             </div>
           </Space>
 
-          <Tag icon={<CheckCircleOutlined />} color="success" style={{ margin: 0 }}>
-            Operational
-          </Tag>
         </header>
 
         <section style={{ marginBottom: 24 }}>

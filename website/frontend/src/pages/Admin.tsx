@@ -1,22 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Empty, Spin, Table, Tag, Typography, Space } from 'antd';
+import { Button, Empty, Spin, Table, Tooltip } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
+import './admin.css';
 import {
-    CopyOutlined,
-    ShareAltOutlined,
-    TeamOutlined,
-    ArrowRightOutlined,
-    DeleteOutlined,
-    UserOutlined,
     ArrowLeftOutlined,
+    ArrowRightOutlined,
+    CopyOutlined,
+    DeleteOutlined,
+    ShareAltOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../contexts/AuthContext';
 import { getAuthHeaders } from '../api/File';
 import { useAlert } from '../Components/Alert';
-
-const { Title, Text, Paragraph } = Typography;
 
 interface ShareEntry {
     user_name: string;
@@ -33,13 +30,6 @@ interface AdminUser {
 
 const API_BASE = '/api';
 
-const panelStyle: React.CSSProperties = {
-    background: '#1f1f1f',
-    border: '1px solid #2d2d2d',
-    borderRadius: 16,
-    boxShadow: '0 10px 30px rgba(0, 0, 0, 0.22)',
-};
-
 const formatDate = (timestamp?: number) => {
     if (!timestamp) return '-';
 
@@ -51,6 +41,27 @@ const formatDate = (timestamp?: number) => {
     const minutes = date.getMinutes().toString().padStart(2, '0');
 
     return `${day}/${month}/${year} ${hours}:${minutes}`;
+};
+
+const timeAgo = (timestamp?: number) => {
+    if (!timestamp) return '';
+
+    const seconds = Math.max(0, Math.floor(Date.now() / 1000 - timestamp));
+    if (seconds < 60) return 'just now';
+
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} min ago`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} hr ago`;
+
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} mo ago`;
+
+    return `${Math.floor(days / 365)} yr ago`;
 };
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -193,52 +204,64 @@ export default function Admin() {
 
     const userColumns: ColumnsType<AdminUser> = [
         {
-            title: 'Username',
+            title: 'User',
             dataIndex: 'username',
             key: 'username',
-            render: (username: string) => <Text style={{ color: '#ffffff' }}>{username}</Text>,
+            render: (username: string, record: AdminUser) => (
+                <div className="admin-user">
+                    <span className="admin-user__name">{username}</span>
+                    {record.is_admin && <span className="admin-tag">admin</span>}
+                    {record.id === user_id && <span className="admin-note">you</span>}
+                </div>
+            ),
         },
         {
             title: 'User ID',
             dataIndex: 'id',
             key: 'id',
             render: (id: string) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ color: '#b3b3b3' }}>{id}</Text>
-                    <Button
-                        type="text"
-                        size="small"
-                        icon={<CopyOutlined />}
-                        onClick={() => copyToClipboard(id, 'User ID')}
-                    />
+                <div className="admin-id">
+                    <code>{id}</code>
+                    <Tooltip title="Copy ID">
+                        <Button
+                            type="text"
+                            size="small"
+                            className="admin-icon-btn admin-reveal"
+                            icon={<CopyOutlined />}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                copyToClipboard(id, 'User ID');
+                            }}
+                        />
+                    </Tooltip>
                 </div>
             ),
         },
         {
-            title: 'Action',
+            title: '',
             key: 'action',
-            width: 120,
-            render: (_: any, record: AdminUser) => {
+            width: 56,
+            align: 'right',
+            render: (_: unknown, record: AdminUser) => {
                 const disabled = record.id === user_id;
 
                 return (
-                    <Button
-                        size="small"
-                        type="text"
-                        disabled={disabled}
-                        icon={
-                            <DeleteOutlined
-                                style={{
-                                    color: disabled ? '#6b6b6b' : '#ff4d4f',
+                    <Tooltip title={disabled ? "You can't delete your own account" : 'Delete user'}>
+                        <span className="admin-reveal">
+                            <Button
+                                size="small"
+                                type="text"
+                                disabled={disabled}
+                                className="admin-icon-btn admin-icon-btn--danger"
+                                icon={<DeleteOutlined />}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteUser(record.id);
+                                    setUsers(prev => prev.filter(user => user.id !== record.id));
                                 }}
                             />
-                        }
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            deleteUser(record.id);
-                            setUsers(prev => prev.filter(user => user.id !== record.id));
-                        }}
-                    />
+                        </span>
+                    </Tooltip>
                 );
             },
         },
@@ -246,39 +269,40 @@ export default function Admin() {
 
     const shareColumns: ColumnsType<ShareEntry> = [
         {
-            title: 'User Name',
-            dataIndex: 'user_name',
-            key: 'user_name',
-            render: (user_name: string) => (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <Text style={{ color: '#b3b3b3' }}>{user_name}</Text>
-                </div>
-            )
-        },
-        {
-            title: 'Shared file',
+            title: 'File',
             dataIndex: 'file_path',
             key: 'file_path',
-            render: (filePath: string) => <Text style={{ color: '#ffffff' }}>{filePath}</Text>,
+            render: (filePath: string) => (
+                <span className="admin-path" title={filePath}>
+                    {filePath}
+                </span>
+            ),
+        },
+        {
+            title: 'Shared by',
+            dataIndex: 'user_name',
+            key: 'user_name',
+            width: 160,
         },
         {
             title: 'Created',
             dataIndex: 'created_at',
             key: 'created_at',
-            width: 180,
-            render: (createdAt: number) => <Text style={{ color: '#b3b3b3' }}>{formatDate(createdAt)}</Text>,
+            width: 160,
+            render: (createdAt: number) => <span title={timeAgo(createdAt)}>{formatDate(createdAt)}</span>,
         },
         {
-            title: 'Link',
+            title: '',
             key: 'link',
-            width: 110,
+            width: 100,
+            align: 'right',
             render: (_: unknown, record: ShareEntry) => (
                 <Button
-                    type="text"
-                    icon={<CopyOutlined />}
+                    type="link"
+                    className="admin-link-btn"
                     onClick={() => copyToClipboard(`${window.location.origin}/share/${record.id}`, 'Share link')}
                 >
-                    Copy
+                    Copy link
                 </Button>
             ),
         },
@@ -286,243 +310,134 @@ export default function Admin() {
 
     if (isAdmin === null || loading) {
         return (
-            <div style={{ minHeight: '100%', display: 'grid', placeItems: 'center', background: '#252525' }}>
-                <Spin />
+            <div className="admin-page admin-page--center">
+                <Spin size="large" />
             </div>
         );
     }
 
     if (!isAdmin) {
         return (
-            <div
-                style={{
-                    minHeight: '100%',
-                    background: '#252525',
-                    padding: 24,
-                    display: 'grid',
-                    placeItems: 'center',
-                }}
-            >
-                <Card style={{ ...panelStyle, width: 'min(720px, 100%)' }}>
-                    <Space direction="vertical" size={18} style={{ width: '100%' }}>
-                        <Tag color="red" style={{ width: 'fit-content', margin: 0 }}>
-                            Access restricted
-                        </Tag>
-                        <Title level={2} style={{ color: '#ffffff', margin: 0 }}>
-                            Admin access required
-                        </Title>
-                        <Paragraph style={{ color: '#b3b3b3', marginBottom: 0 }}>
-                            You do not have admin permissions.
-                            Only admin users can open this page.
-                        </Paragraph>
-                        <Space wrap>
-                            <Button type="primary" icon={<ArrowRightOutlined />} onClick={() => navigate('/files')}>
-                                Go to files
-                            </Button>
-                            <Button icon={<ShareAltOutlined />} onClick={() => navigate('/shares')}>
-                                View shared files
-                            </Button>
-                        </Space>
-                    </Space>
-                </Card>
+            <div className="admin-page admin-page--center">
+                <div className="admin-gate">
+                    <p className="admin-gate__label">Access restricted</p>
+                    <h1 className="admin-gate__title">Admin access required</h1>
+                    <p className="admin-gate__text">
+                        You do not have admin permissions. Only admin users can open this page.
+                    </p>
+                    <div className="admin-gate__actions">
+                        <Button type="primary" icon={<ArrowRightOutlined />} onClick={() => navigate('/files')}>
+                            Go to files
+                        </Button>
+                        <Button icon={<ShareAltOutlined />} onClick={() => navigate('/shares')}>
+                            View shared files
+                        </Button>
+                    </div>
+                </div>
             </div>
         );
     }
 
-    return (
-        <div style={{ minHeight: '100%', background: '#1c1c1e', padding: '32px 32px 48px' }}>
+    const adminCount = users.filter(user => user.is_admin).length;
+    const latestShare = shares.reduce((latest, share) => Math.max(latest, share.created_at || 0), 0);
+    const sortedShares = [...shares].sort((a, b) => b.created_at - a.created_at);
 
-            <div style={{ marginBottom: 28 }}>
+    return (
+        <div className="admin-page">
+            <div className="admin-shell">
                 <Button
                     type="text"
+                    className="admin-back"
                     icon={<ArrowLeftOutlined />}
                     onClick={() => navigate(-1)}
-                    style={{
-                        color: '#b3b3b3',
-                        padding: 10,
-                        marginBottom: 12,
-                    }}
                 >
                     Back
                 </Button>
 
-                <Title
-                    level={3}
-                    style={{
-                        color: '#ffffff',
-                        margin: 0,
-                        fontWeight: 600,
-                        letterSpacing: -0.3,
-                    }}
-                >
-                    Dashboard
-                </Title>
+                <h1 className="admin-title">Dashboard</h1>
 
-                <Text style={{ color: '#7a7a7e', fontSize: 14 }}>
-                    Overview of shared links and user access.
-                </Text>
+                <div className="admin-summary">
+                    <div className="admin-summary__item">
+                        <span className="admin-summary__label">Users</span>
+                        <span className="admin-summary__value">{users.length}</span>
+                    </div>
+                    <div className="admin-summary__item">
+                        <span className="admin-summary__label">Admins</span>
+                        <span className="admin-summary__value">{adminCount}</span>
+                    </div>
+                    <div className="admin-summary__item">
+                        <span className="admin-summary__label">Shared links</span>
+                        <span className="admin-summary__value">{shares.length}</span>
+                    </div>
+                    <div className="admin-summary__item">
+                        <span className="admin-summary__label">Last shared</span>
+                        <span className="admin-summary__value admin-summary__value--text">
+                            {latestShare ? timeAgo(latestShare) : '—'}
+                        </span>
+                    </div>
+                </div>
+
+                <section className="admin-section">
+                    <div className="admin-section__head">
+                        <h2 className="admin-section__title">Users</h2>
+                        <span className="admin-section__count">{users.length}</span>
+                    </div>
+
+                    <div className="admin-box">
+                        {users.length > 0 ? (
+                            <Table
+                                columns={userColumns}
+                                dataSource={users}
+                                rowKey="id"
+                                pagination={false}
+                                size="middle"
+                                scroll={{ x: 'max-content' }}
+                                onRow={(record) => ({
+                                    onClick: () => navigate(`/files/${record.id}`),
+                                })}
+                                rowClassName={() => 'admin-row admin-row--clickable'}
+                            />
+                        ) : (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description={
+                                    usersAvailable
+                                        ? 'No users returned by the management endpoint yet.'
+                                        : 'User management is not wired up on the backend yet.'
+                                }
+                                className="admin-empty"
+                            />
+                        )}
+                    </div>
+                </section>
+
+                <section className="admin-section">
+                    <div className="admin-section__head">
+                        <h2 className="admin-section__title">Shared links</h2>
+                        <span className="admin-section__count">{shares.length}</span>
+                    </div>
+
+                    <div className="admin-box">
+                        {shares.length > 0 ? (
+                            <Table
+                                columns={shareColumns}
+                                dataSource={sortedShares}
+                                rowKey="id"
+                                pagination={false}
+                                size="middle"
+                                scroll={{ x: 'max-content' }}
+                                rowClassName={() => 'admin-row'}
+                            />
+                        ) : (
+                            <Empty
+                                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                                description="No shared links found for the current account."
+                                className="admin-empty"
+                            />
+                        )}
+                    </div>
+                </section>
             </div>
-
-            <div
-                style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                    gap: 16,
-                    marginBottom: 24,
-                }}
-            >
-                <Card
-                    style={{
-                        ...panelStyle,
-                        minHeight: 100,
-                        border: '1px solid #2d2d30',
-                        borderRadius: 12,
-                    }}
-                    bodyStyle={{ padding: 20 }}
-                >
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                        <Space size={8} align="center">
-                            <ShareAltOutlined style={{ color: '#5b8def', fontSize: 15 }} />
-                            <Text style={{ color: '#9a9aa2', fontSize: 13, fontWeight: 500 }}>
-                                SHARED LINKS
-                            </Text>
-                        </Space>
-                        <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 600 }}>
-                            {shares.length}
-                        </Title>
-                    </Space>
-                </Card>
-
-                <Card
-                    style={{
-                        ...panelStyle,
-                        minHeight: 100,
-                        border: '1px solid #2d2d30',
-                        borderRadius: 12,
-                    }}
-                    bodyStyle={{ padding: 20 }}
-                >
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                        <Space size={8} align="center">
-                            <TeamOutlined style={{ color: '#5b8def', fontSize: 15 }} />
-                            <Text style={{ color: '#9a9aa2', fontSize: 13, fontWeight: 500 }}>
-                                USERS
-                            </Text>
-                        </Space>
-                        <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 600 }}>
-                            {users.length}
-                        </Title>
-                    </Space>
-                </Card>
-
-                <Card
-                    style={{
-                        ...panelStyle,
-                        minHeight: 100,
-                        border: '1px solid #2d2d30',
-                        borderRadius: 12,
-                    }}
-                    bodyStyle={{ padding: 20 }}
-                >
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                        <Space size={8} align="center">
-                            <UserOutlined style={{ color: '#5b8def', fontSize: 15 }} />
-                            <Text style={{ color: '#9a9aa2', fontSize: 13, fontWeight: 500 }}>
-                                SIGNED IN AS
-                            </Text>
-                        </Space>
-                        <Title level={4} style={{ color: '#ffffff', margin: 0, fontWeight: 600 }}>
-                            {user_id || 'Unknown user'}
-                        </Title>
-                    </Space>
-                </Card>
-            </div>
-
-            <Card
-                title={<span style={{ color: '#ffffff', fontWeight: 600, fontSize: 15 }}>All users</span>}
-                style={{ ...panelStyle, marginBottom: 20, border: '1px solid #2d2d30', borderRadius: 12 }}
-                styles={{
-                    body: { padding: 3 },
-                }}
-            >
-                {users.length > 0 ? (
-                    <Table
-                        columns={userColumns}
-                        dataSource={users.map(user => ({ ...user, key: user.id }))}
-                        pagination={false}
-                        size="middle"
-                        onRow={(record) => ({
-                            onClick: () => navigate(`/files/${record.id}`),
-                            style: { cursor: 'pointer' },
-                        })}
-                        rowClassName={() => 'dashboard-row'}
-                    />
-                ) : (
-                    <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={
-                            <Text style={{ color: '#7a7a7e' }}>
-                                {usersAvailable
-                                    ? 'No users returned by the management endpoint yet.'
-                                    : 'User management is not wired up on the backend yet.'}
-                            </Text>
-                        }
-                        style={{ padding: '32px 0' }}
-                    />
-                )}
-            </Card>
-
-            <Card
-                title={<span style={{ color: '#ffffff', fontWeight: 600, fontSize: 15 }}>All existing links</span>}
-                style={{ ...panelStyle, border: '1px solid #2d2d30', borderRadius: 12 }}
-                styles={{
-                    body: { padding: 3 },
-                }}
-            >
-                {shares.length > 0 ? (
-                    <Table
-                        columns={shareColumns}
-                        dataSource={shares.map(share => ({ ...share, key: share.id }))}
-                        pagination={false}
-                        size="middle"
-                        rowClassName={() => 'dashboard-row'}
-                    />
-                ) : (
-                    <Empty
-                        image={Empty.PRESENTED_IMAGE_SIMPLE}
-                        description={
-                            <Text style={{ color: '#7a7a7e' }}>
-                                No shared links found for the current account.
-                            </Text>
-                        }
-                        style={{ padding: '32px 0' }}
-                    />
-                )}
-            </Card>
-
-            <style>{`
-            .dashboard-row:hover td {
-                background: #232326 !important;
-            }
-            .ant-table {
-                background: transparent !important;
-            }
-            .ant-table-thead > tr > th {
-                background: #1f1f22 !important;
-                color: #9a9aa2 !important;
-                border-bottom: 1px solid #2d2d30 !important;
-                font-weight: 500 !important;
-                font-size: 12px !important;
-                text-transform: uppercase;
-                letter-spacing: 0.4px;
-            }
-            .ant-table-tbody > tr > td {
-                background: transparent !important;
-                border-bottom: 1px solid #232326 !important;
-                color: #d4d4d8;
-            }
-        `}</style>
-
         </div>
     );
 }

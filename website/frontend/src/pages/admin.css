@@ -1,0 +1,341 @@
+.admin-page {
+    --bg: #1c1c1e;
+    --surface: #202022;
+    --line: #2d2d30;
+    --text: #d4d4d8;
+    --strong: #f4f4f5;
+    --muted: #85858d;
+    --accent: #5b8def;
+    --danger: #ff4d4f;
+    min-height: 100%;
+    box-sizing: border-box;
+    padding: 28px 32px 56px;
+    color: var(--text);
+    font-size: 13px;
+    background: var(--bg);
+}
+
+.admin-page--center {
+    display: grid;
+    place-items: center;
+}
+
+.admin-shell {
+    max-width: 980px;
+    margin: 0 auto;
+}
+
+/* ---------- header ---------- */
+
+.admin-page .admin-back.ant-btn {
+    height: auto;
+    margin: 0 0 14px -8px;
+    padding: 3px 8px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.admin-page .admin-back.ant-btn:hover {
+    color: var(--strong);
+    background: transparent;
+}
+
+.admin-title {
+    margin: 0 0 24px;
+    color: var(--strong);
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+}
+
+/* ---------- summary ---------- */
+
+.admin-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    margin-bottom: 32px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--line);
+}
+
+.admin-summary__item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 18px 16px;
+    background: var(--surface);
+}
+
+.admin-summary__label {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.admin-summary__value {
+    color: var(--strong);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1.2;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-summary__value--text {
+    font-size: 17px;
+    line-height: 1.55;
+    font-weight: 500;
+}
+
+/* ---------- sections ---------- */
+
+.admin-section {
+    margin-bottom: 32px;
+}
+
+.admin-section__head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0 0 10px;
+}
+
+.admin-section__title {
+    margin: 0;
+    color: var(--strong);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.admin-section__count {
+    color: var(--muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.admin-box {
+    overflow: hidden;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.admin-page .admin-empty {
+    margin: 0;
+    padding: 36px 0;
+}
+
+.admin-page .admin-empty .ant-empty-description {
+    color: var(--muted);
+}
+
+.admin-page .admin-empty .ant-empty-image ellipse {
+    fill: #26262a;
+}
+
+.admin-page .admin-empty .ant-empty-image g[stroke] {
+    stroke: #3a3a40;
+}
+
+.admin-page .admin-empty .ant-empty-image path + path {
+    fill: #202023;
+}
+
+/* ---------- tables ---------- */
+
+.admin-page .ant-table {
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.admin-page .ant-table.ant-table-middle .ant-table-thead > tr > th {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--line) !important;
+    color: var(--muted) !important;
+    font-size: 12px;
+    font-weight: 500;
+    background: transparent !important;
+}
+
+.admin-page .ant-table-thead > tr > th::before {
+    display: none !important;
+}
+
+.admin-page .ant-table.ant-table-middle .ant-table-tbody > tr > td {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--line) !important;
+    color: var(--text);
+    background: transparent !important;
+}
+
+.admin-page .ant-table-tbody > tr:last-child > td {
+    border-bottom: 0 !important;
+}
+
+.admin-page .ant-table-tbody > tr.admin-row:hover > td {
+    background: #252528 !important;
+}
+
+.admin-page .admin-row--clickable {
+    cursor: pointer;
+}
+
+/* user cell */
+
+.admin-user {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+
+.admin-user__name {
+    color: var(--strong);
+    font-weight: 500;
+}
+
+.admin-tag {
+    padding: 0 5px;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 16px;
+}
+
+.admin-note {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* id cell */
+
+.admin-id {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.admin-id code {
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+}
+
+/* quiet icon buttons, revealed when the row is hovered */
+
+.admin-page .admin-icon-btn.ant-btn {
+    color: var(--muted);
+}
+
+.admin-page .admin-icon-btn.ant-btn:hover:not(:disabled) {
+    color: var(--strong);
+    background: rgba(255, 255, 255, 0.07);
+}
+
+.admin-page .admin-icon-btn--danger.ant-btn:hover:not(:disabled) {
+    color: var(--danger);
+    background: rgba(255, 77, 79, 0.12);
+}
+
+.admin-page .admin-icon-btn.ant-btn:disabled {
+    color: #4a4a50;
+}
+
+.admin-reveal {
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+.admin-row:hover .admin-reveal,
+.admin-reveal:focus-within {
+    opacity: 1;
+}
+
+@media (hover: none) {
+    .admin-reveal {
+        opacity: 1;
+    }
+}
+
+/* share cells */
+
+.admin-path {
+    display: block;
+    max-width: 380px;
+    overflow: hidden;
+    color: var(--strong);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.admin-page .admin-link-btn.ant-btn {
+    height: auto;
+    padding: 0;
+    color: var(--accent);
+    font-size: 13px;
+}
+
+.admin-page .admin-link-btn.ant-btn:hover {
+    color: #8fb0f5;
+    background: transparent;
+}
+
+/* ---------- restricted state ---------- */
+
+.admin-gate {
+    width: min(420px, 100%);
+    box-sizing: border-box;
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+.admin-gate__label {
+    margin: 0 0 6px;
+    color: var(--danger);
+    font-size: 12px;
+}
+
+.admin-gate__title {
+    margin: 0 0 8px;
+    color: var(--strong);
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.admin-gate__text {
+    margin: 0 0 20px;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.admin-gate__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.admin-page .admin-gate__actions .ant-btn-default {
+    border-color: #3a3a40;
+    color: var(--text);
+    background: transparent;
+}
+
+.admin-page .admin-gate__actions .ant-btn-default:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+@media (max-width: 720px) {
+    .admin-page {
+        padding: 20px 16px 40px;
+    }
+
+    .admin-summary {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}

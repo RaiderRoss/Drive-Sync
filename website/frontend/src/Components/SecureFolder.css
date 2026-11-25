@@ -2,8 +2,24 @@
     --secure-blue: #111820;
     --folder-width: 210px;
     --folder-height: 170px;
+    --folder-bottom: 32px;
+    --front-height: calc(var(--folder-height) * 0.78);
     --paper: #f6efe2;
     --ink: #1f2925;
+
+    /* Lock + chain geometry. Everything radiates from one hub point, the
+       centre of the lock body, so the four chain arms can never drift apart. */
+    --hub-y: 80px; /* hub distance from the top edge of the front panel */
+    --slope: 20deg; /* angle of the chains off the horizontal */
+    --link-pitch: 19px; /* distance between link centres along a chain */
+    --chain: #0b0e12;
+    --lock-w: 80px;
+    --lock-h: 62px;
+    --unlock-blue: #1689d8;
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.2, 1.35, 0.35, 1);
+
     position: relative;
     display: block;
     width: var(--folder-width);
@@ -16,12 +32,13 @@
     background: transparent;
     font-family: inherit;
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .secure-folder__folder {
     position: absolute;
     right: 0;
-    bottom: 32px;
+    bottom: var(--folder-bottom);
     left: 0;
     height: var(--folder-height);
     filter: drop-shadow(0 22px 18px rgba(9, 27, 23, 0.22));
@@ -50,6 +67,8 @@
     background: #d49358;
 }
 
+/* ---------- Papers ---------- */
+
 .secure-folder__paper {
     top: 14px;
     right: 18px;
@@ -67,10 +86,23 @@
     opacity: 0;
     transform: translateY(38px) rotate(2deg) scale(0.96);
     box-shadow: 0 6px 12px rgba(31, 41, 37, 0.12);
+    /* closing: papers slide back down, front paper leaves first */
     transition:
-        opacity 180ms ease,
-        transform 600ms cubic-bezier(0.16, 1, 0.3, 1);
+        opacity 200ms ease 160ms,
+        transform 420ms cubic-bezier(0.5, 0, 0.75, 0) 60ms;
     will-change: transform, opacity;
+}
+
+/* a little "heading" mark so the sheets read as documents */
+.secure-folder__paper::before {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    width: 38%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(31, 41, 37, 0.34);
+    content: '';
 }
 
 .secure-folder__paper--back {
@@ -82,10 +114,12 @@
     transform: translateY(46px) rotate(-5deg) scale(0.94);
     filter: brightness(0.92);
     transition:
-        opacity 220ms ease,
-        transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+        opacity 220ms ease 100ms,
+        transform 460ms cubic-bezier(0.5, 0, 0.75, 0) 0ms;
     will-change: transform, opacity;
 }
+
+/* ---------- Front panel + lockup (they tilt together) ---------- */
 
 .secure-folder__front {
     right: 0;
@@ -100,584 +134,258 @@
     box-shadow: inset 0 1px rgba(255, 255, 255, 0.28);
     transform: perspective(900px) rotateX(0deg);
     transform-origin: 50% 100%;
-    transition:
-        transform 650ms cubic-bezier(0.16, 1, 0.3, 1);
+    transition: transform 520ms cubic-bezier(0.5, 0, 0.2, 1) 120ms;
     will-change: transform;
 }
 
+/* Same rectangle as the front panel, same transform, same timing. */
+.secure-folder__lockup {
+    position: absolute;
+    right: 0;
+    bottom: var(--folder-bottom);
+    left: 0;
+    z-index: 3;
+    height: var(--front-height);
+    pointer-events: none;
+    transform: perspective(900px) rotateX(0deg);
+    transform-origin: 50% 100%;
+    transition: transform 520ms cubic-bezier(0.5, 0, 0.2, 1) 120ms;
+    will-change: transform;
+}
+
+/* ---------- Chains ---------- */
+
+/* Clips the chains to the front panel so they read as wrapping around the
+   folder's sides. When open only the top/bottom clip is lifted, so links can
+   fall free but never stick out past the folder's left and right edges. */
+.secure-folder__chains {
+    position: absolute;
+    inset: 0;
+    clip-path: inset(0 round 16px);
+    filter: drop-shadow(0 2px 1.5px rgba(48, 20, 2, 0.4));
+    /* closing: re-clip only after the links have re-seated */
+    transition: clip-path 1ms linear 640ms;
+}
+
+/* Each arm is a zero-size anchor sitting on the hub. */
 .secure-folder__chain {
     position: absolute;
-    z-index: 3;
-    display: flex;
-    width: 96px;
-    height: 34px;
-    align-items: center;
-    padding: 0;
-    pointer-events: none;
-    transform-origin: center;
-    transition: transform 520ms cubic-bezier(0.2, 1.25, 0.35, 1);
-}
-
-.secure-folder__link {
-    position: relative;
-    display: block;
-    box-sizing: border-box;
-    flex: 0 0 auto;
-    background: transparent;
-    transform-origin: center;
-    box-shadow: 0 2px 0 rgba(255, 255, 255, 0.18);
-}
-
-.secure-folder__link:nth-child(odd) {
-    width: 27px;
-    height: 15px;
-    flex-basis: 27px;
-    background: transparent;
-    border: 4px solid #000;
-    border-radius: 50%;
-    transform: translateY(1px);
-}
-
-.secure-folder__link:nth-child(even) {
-    width: 34px;
-    height: 5px;
-    flex-basis: 34px;
-    background: #000;
-    border: 0;
-    border-radius: 999px;
-    transform: translateY(1px);
-}
-
-.secure-folder__link + .secure-folder__link {
-    margin-left: -9px;
+    top: var(--hub-y);
+    left: 50%;
+    width: 0;
+    height: 0;
 }
 
 .secure-folder__chain--TL {
-    top: 178px;
-    left: 60px;
-    transform: translate(-50%, -50%) rotate(25deg);
+    --theta: calc(180deg + var(--slope));
+    --side: -1;
 }
 
 .secure-folder__chain--TR {
-    top: 178px;
-    left: 180px;
-    flex-direction: row-reverse;
-    transform: translate(-50%, -50%) rotate(-25deg);
+    --theta: calc(360deg - var(--slope));
+    --side: 1;
 }
 
 .secure-folder__chain--BL {
-    top: 228px;
-    left: 55px;
-    transform: translate(-50%, -50%) rotate(-25deg);
+    --theta: calc(180deg - var(--slope));
+    --side: -1;
 }
 
 .secure-folder__chain--BR {
-    top: 232px;
-    left: 170px;
-    flex-direction: row-reverse;
-    transform: translate(-50%, -50%) rotate(25deg);
+    --theta: var(--slope);
+    --side: 1;
 }
+
+.secure-folder__link {
+    /* position along the arm, in screen space */
+    --t: calc(var(--i) * var(--link-pitch));
+    /* where the link goes when the chain lets go (screen space) */
+    --dx: calc(var(--side) * var(--i) * 1.5px + var(--k) * 6px);
+    --dy: calc(24px + var(--i) * 5px + var(--k) * 6px);
+    --spin: calc(var(--side) * 50deg + var(--k) * 70deg);
+
+    position: absolute;
+    top: calc(var(--t) * sin(var(--theta)));
+    left: calc(var(--t) * cos(var(--theta)));
+    box-sizing: border-box;
+    rotate: var(--theta);
+    translate: 0 0;
+    opacity: 1;
+    /* closing: chain wraps back, inner links first */
+    transition:
+        translate 520ms cubic-bezier(0.2, 0.9, 0.3, 1.12) calc(var(--i) * 32ms),
+        rotate 520ms cubic-bezier(0.2, 0.9, 0.3, 1.12) calc(var(--i) * 32ms),
+        opacity 160ms ease-out calc(var(--i) * 32ms);
+    will-change: translate, rotate, opacity;
+}
+
+/* face-on link: a stadium-shaped ring */
+.secure-folder__link--ring {
+    z-index: 2;
+    width: 28px;
+    height: 16px;
+    margin: -8px 0 0 -14px;
+    border: 4px solid var(--chain);
+    border-radius: 999px;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
+/* edge-on link: a bar threaded through the rings either side of it. Same wire
+   thickness as the ring border; short enough that its tips stop inside the
+   neighbouring rings' holes without meeting in the middle. */
+.secure-folder__link--bar {
+    z-index: 1;
+    width: 30px;
+    height: 4px;
+    margin: -2px 0 0 -15px;
+    border-radius: 2px;
+    background: linear-gradient(
+        180deg,
+        var(--chain) 0 1px,
+        #3a424d 1px 2px,
+        var(--chain) 2px
+    );
+}
+
+/* ---------- Lock ---------- */
 
 .secure-folder__lock {
     position: absolute;
-    top: 220px;
+    top: var(--hub-y);
     left: 50%;
-    z-index: 4;
-    display: grid;
-    width: 86px;
-    height: 72px;
-    place-items: center;
-    box-sizing: border-box;
-    border: 4px solid #000;
-    border-radius: 12px;
-    background: #fff;
-    color: #000;
-    font-size: 30px;
-    transform: translateX(-50%);
+    width: var(--lock-w);
+    height: var(--lock-h);
+    margin: calc(var(--lock-h) / -2) 0 0 calc(var(--lock-w) / -2);
+    translate: 0 0;
+    rotate: 0deg;
     transition:
-        transform 420ms cubic-bezier(0.2, 1.25, 0.35, 1),
-        background 220ms ease;
+        translate 380ms var(--ease-out),
+        rotate 380ms var(--ease-out);
+    will-change: translate, rotate;
 }
 
-.secure-folder__lock::before {
+.secure-folder__shackle {
     position: absolute;
-    top: -40px;
+    bottom: calc(100% - 14px);
     left: 50%;
-    width: 48px;
-    height: 40px;
+    width: 46px;
+    height: 46px;
+    margin-left: -23px;
     box-sizing: border-box;
-    border: 5px solid #030303;
+    border: 5px solid var(--chain);
     border-bottom: 0;
-    border-radius: 20px 20px 0 0;
-    content: '';
-    transform: translateX(-50%);
+    border-radius: 23px 23px 0 0;
+    /* pivot on the right leg, hidden inside the lock body */
+    transform-origin: calc(100% - 2.5px) 100%;
+    translate: 0 0;
+    rotate: 0deg;
+    transition:
+        translate 260ms var(--ease-out),
+        rotate 300ms var(--ease-out);
+}
+
+.secure-folder__body {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    border: 4px solid var(--chain);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--chain);
+    font-size: 32px;
+    box-shadow: 0 5px 10px rgba(48, 20, 2, 0.28);
+    transition:
+        background 260ms ease,
+        color 260ms ease;
+}
+
+.secure-folder__keyhole {
+    display: block;
+    width: 19px;
+    height: 30px;
+    fill: currentColor;
+    transition:
+        rotate 520ms var(--ease-spring),
+        scale 520ms var(--ease-spring);
+}
+
+/* ---------- Open state ---------- */
+
+.secure-folder[data-open] .secure-folder__front,
+.secure-folder[data-open] .secure-folder__lockup {
+    transform: perspective(900px) rotateX(-20deg);
+    transition: transform 620ms var(--ease-out) 60ms;
 }
 
 .secure-folder[data-open] .secure-folder__paper--back {
     opacity: 1;
     transform: translateY(-22px) rotate(-7deg) scale(1);
+    transition:
+        opacity 220ms ease 220ms,
+        transform 760ms var(--ease-spring) 220ms;
 }
 
 .secure-folder[data-open] .secure-folder__paper:not(.secure-folder__paper--back) {
     opacity: 1;
     transform: translateY(-12px) rotate(6deg) scale(1);
-    transition-delay: 90ms;
+    transition:
+        opacity 200ms ease 300ms,
+        transform 760ms var(--ease-spring) 300ms;
 }
 
-.secure-folder[data-open] .secure-folder__front {
-    transform: perspective(900px) rotateX(-20deg);
+/* lock: pops, shackle springs open, body turns blue, keyhole turns */
+.secure-folder[data-open] .secure-folder__lock {
+    translate: 0 -7px;
+    rotate: -6deg;
+    transition:
+        translate 420ms var(--ease-spring) 40ms,
+        rotate 620ms var(--ease-spring) 140ms;
 }
 
-.secure-folder[data-open] .secure-folder__chain--TL {
-    transform: translate(-50%, -50%) rotate(25deg) translate(-18px, -5px);
+.secure-folder[data-open] .secure-folder__shackle {
+    translate: 0 -9px;
+    rotate: 24deg;
+    transition:
+        translate 300ms var(--ease-spring),
+        rotate 420ms var(--ease-spring) 90ms;
 }
 
-.secure-folder[data-open] .secure-folder__chain--TR {
-    transform: translate(-50%, -50%) rotate(-25deg) translate(18px, -5px);
+.secure-folder[data-open] .secure-folder__body {
+    background: var(--unlock-blue);
+    color: #fff;
 }
 
-.secure-folder[data-open] .secure-folder__chain--BL {
-    transform: translate(-50%, -50%) rotate(-25deg) translate(-18px, 5px);
+/* the key turns: the keyhole rotates a quarter turn inside the lock body */
+.secure-folder[data-open] .secure-folder__keyhole {
+    scale: 0.92;
+    transition-delay: 110ms;
 }
 
-.secure-folder[data-open] .secure-folder__chain--BR {
-    transform: translate(-50%, -50%) rotate(25deg) translate(18px, 5px);
+/* chains: let go from the lock outward, each link drops, tumbles and fades */
+.secure-folder[data-open] .secure-folder__chains {
+    clip-path: inset(-140px 0 -220px 0 round 16px);
+    transition-delay: 0ms;
 }
 
 .secure-folder[data-open] .secure-folder__link {
-    animation: secure-chain-break 560ms cubic-bezier(0.2, 1.2, 0.35, 1) both;
-}
-
-.secure-folder[data-open] .secure-folder__link:nth-child(2) {
-    animation-delay: 45ms;
-}
-
-.secure-folder[data-open] .secure-folder__link:nth-child(3) {
-    animation-delay: 90ms;
-}
-
-.secure-folder[data-open] .secure-folder__link:nth-child(4) {
-    animation-delay: 135ms;
-}
-
-.secure-folder[data-open] .secure-folder__chain--TR .secure-folder__link,
-.secure-folder[data-open] .secure-folder__chain--BR .secure-folder__link {
-    animation-name: secure-chain-break-right;
-}
-
-.secure-folder[data-open] .secure-folder__lock {
-    transform: translate(-50%, -24px) rotate(-4deg);
-    background: #1689d8;
-}
-
-@keyframes secure-chain-break {
-    0% {
-        transform: translateY(1px);
-    }
-
-    100% {
-        transform: translate(-10px, 4px);
-    }
-}
-
-@keyframes secure-chain-break-right {
-    0% {
-        transform: translateY(1px);
-    }
-
-    100% {
-        transform: translate(10px, 4px);
-    }
+    translate: var(--dx) var(--dy);
+    rotate: calc(var(--theta) + var(--spin));
+    opacity: 0;
+    transition:
+        translate 640ms cubic-bezier(0.4, -0.45, 0.7, 0.35)
+            calc(70ms + var(--i) * 42ms),
+        rotate 640ms cubic-bezier(0.3, 0, 0.6, 1) calc(70ms + var(--i) * 42ms),
+        opacity 240ms ease-in calc(70ms + var(--i) * 42ms + 400ms);
 }
 
 @media (prefers-reduced-motion: reduce) {
     .secure-folder,
-    .secure-folder__paper,
-    .secure-folder__front,
-    .secure-folder__chain,
-    .secure-folder__lock,
-    .secure-folder__link {
-        transition-duration: 1ms;
+    .secure-folder * {
+        transition-duration: 1ms !important;
+        transition-delay: 0ms !important;
         animation: none !important;
-    }
-}
-
-.sync-workspace {
-    width: 100%;
-}
-
-.sync-workspace__description {
-    width: 100%;
-    max-width: none;
-    margin: 0 0 18px !important;
-    color: #a8a8b0 !important;
-    font-size: 14px;
-    line-height: 1.7;
-}
-
-.sync-workspace__status {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    margin-bottom: 24px;
-    color: #85858d;
-    font-size: 11px;
-}
-
-.sync-workspace__status-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #52c41a;
-    box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.5);
-    animation: sync-status-pulse 2s infinite;
-}
-
-.sync-workspace__status-time {
-    margin-left: auto;
-    color: #5f6066;
-}
-
-.sync-workspace__devices {
-    display: flex;
-    width: 100%;
-    align-items: center;
-}
-
-.sync-workspace__device-wrapper {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    align-items: center;
-}
-
-.sync-workspace__device {
-    position: relative;
-    display: flex;
-    width: 100%;
-    min-width: 0;
-    align-items: center;
-    padding: 14px;
-    border: 1px solid #35363b;
-    border-radius: 12px;
-    background: linear-gradient(145deg, #292a2e, #222326);
-    transition:
-        transform 250ms ease,
-        border-color 250ms ease,
-        box-shadow 250ms ease,
-        background 250ms ease;
-}
-
-.sync-workspace__device:hover {
-    z-index: 2;
-    border-color: #4269b2;
-    background: linear-gradient(145deg, #30333a, #24262a);
-    box-shadow:
-        0 10px 30px rgba(0, 0, 0, 0.25),
-        0 0 20px rgba(66, 105, 178, 0.1);
-    transform: translateY(-4px);
-}
-
-.sync-workspace__device-icon {
-    position: relative;
-    display: grid;
-    width: 48px;
-    height: 48px;
-    flex-shrink: 0;
-    place-items: center;
-    border: 1px solid #414249;
-    border-radius: 11px;
-    background: #202125;
-    color: #72a0ff;
-    font-size: 20px;
-    transition:
-        transform 300ms ease,
-        color 300ms ease,
-        background 300ms ease;
-}
-
-.sync-workspace__device:hover .sync-workspace__device-icon {
-    color: #9bbaff;
-    background: #252a34;
-    transform: scale(1.08) rotate(-3deg);
-}
-
-.sync-workspace__device-pulse {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #52c41a;
-    box-shadow: 0 0 8px rgba(82, 196, 26, 0.8);
-    animation: sync-device-pulse 1.8s ease-in-out infinite;
-}
-
-.sync-workspace__device-info {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    margin-left: 12px;
-    overflow: hidden;
-}
-
-.sync-workspace__device-label {
-    overflow: hidden;
-    color: #fff !important;
-    font-size: 13px;
-    font-weight: 600;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sync-workspace__device-state {
-    margin-top: 2px;
-    overflow: hidden;
-    color: #72a0ff !important;
-    font-size: 11px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sync-workspace__device-detail {
-    margin-top: 3px;
-    overflow: hidden;
-    color: #686970 !important;
-    font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.sync-workspace__device-sync {
-    margin-left: 8px;
-    color: #4f78c5;
-    font-size: 12px;
-    opacity: 0.7;
-    animation: sync-rotate 3s linear infinite;
-}
-
-.sync-workspace__connection {
-    position: relative;
-    width: 55px;
-    height: 30px;
-    flex-shrink: 0;
-}
-
-.sync-workspace__connection-line {
-    position: absolute;
-    top: 50%;
-    right: 0;
-    left: 0;
-    height: 1px;
-    background: linear-gradient(
-        90deg,
-        #4269b2,
-        #72a0ff,
-        #4269b2
-    );
-    background-size: 200% 100%;
-    animation: sync-line-flow 2s linear infinite;
-}
-
-.sync-workspace__connection-dot {
-    position: absolute;
-    top: 50%;
-    left: 0;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #9bbaff;
-    box-shadow: 0 0 8px rgba(114, 160, 255, 0.8);
-    transform: translateY(-50%);
-    animation: sync-flow-dot 2.4s linear infinite;
-}
-
-.sync-workspace__connection-dot--2 {
-    animation-delay: 0.8s;
-}
-
-.sync-workspace__connection-dot--3 {
-    animation-delay: 1.6s;
-}
-
-.sync-workspace__progress {
-    width: 100%;
-    margin-top: 24px;
-}
-
-.sync-workspace__progress-header {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 7px;
-    color: #66676d;
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-}
-
-.sync-workspace__progress-header span:last-child {
-    color: #72a0ff;
-}
-
-.sync-workspace__progress-track {
-    position: relative;
-    width: 100%;
-    height: 3px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: #303136;
-}
-
-.sync-workspace__progress-fill {
-    position: relative;
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(
-        90deg,
-        #31558f,
-        #72a0ff,
-        #31558f
-    );
-    background-size: 200% 100%;
-    animation: sync-progress-flow 2s linear infinite;
-}
-
-@keyframes sync-status-pulse {
-    0%,
-    100% {
-        box-shadow: 0 0 0 0 rgba(82, 196, 26, 0.45);
-    }
-
-    50% {
-        box-shadow: 0 0 0 5px rgba(82, 196, 26, 0);
-    }
-}
-
-@keyframes sync-device-pulse {
-    0%,
-    100% {
-        opacity: 0.5;
-        transform: scale(0.85);
-    }
-
-    50% {
-        opacity: 1;
-        transform: scale(1.15);
-    }
-}
-
-@keyframes sync-rotate {
-    from {
-        transform: rotate(0deg);
-    }
-
-    to {
-        transform: rotate(360deg);
-    }
-}
-
-@keyframes sync-line-flow {
-    0% {
-        background-position: 100% 0;
-    }
-
-    100% {
-        background-position: -100% 0;
-    }
-}
-
-@keyframes sync-flow-dot {
-    0% {
-        left: 0;
-        opacity: 0;
-    }
-
-    10% {
-        opacity: 1;
-    }
-
-    90% {
-        opacity: 1;
-    }
-
-    100% {
-        left: 100%;
-        opacity: 0;
-    }
-}
-
-@keyframes sync-progress-flow {
-    0% {
-        background-position: 100% 0;
-    }
-
-    100% {
-        background-position: -100% 0;
-    }
-}
-
-@media (max-width: 700px) {
-    .sync-workspace__devices {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 0;
-    }
-
-    .sync-workspace__device-wrapper {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .sync-workspace__connection {
-        width: 100%;
-        height: 28px;
-    }
-
-    .sync-workspace__connection-line {
-        top: 0;
-        right: auto;
-        bottom: 0;
-        left: 50%;
-        width: 1px;
-        height: auto;
-    }
-
-    .sync-workspace__connection-dot {
-        top: 0;
-        left: 50%;
-        transform: translateX(-50%);
-        animation-name: sync-flow-dot-mobile;
-    }
-
-    .sync-workspace__connection-dot--2 {
-        animation-delay: 0.8s;
-    }
-
-    .sync-workspace__connection-dot--3 {
-        animation-delay: 1.6s;
-    }
-}
-
-@keyframes sync-flow-dot-mobile {
-    0% {
-        top: 0;
-        opacity: 0;
-    }
-
-    10% {
-        opacity: 1;
-    }
-
-    90% {
-        opacity: 1;
-    }
-
-    100% {
-        top: 100%;
-        opacity: 0;
     }
 }

@@ -1,0 +1,11 @@
+# Dependencies and build outputs
+target/
+node_modules/
+
+# Rust/Cargo specific
+changes.toml
+logs.toml
+
+# Environment files and database files
+.env
+.db
